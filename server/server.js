@@ -80,7 +80,7 @@ function gameLoop() {
 function emitLoop(){
     io.sockets.emit('update', f2.stringify(Game.serializeUpdate(game)));
     game.clearEventLog();
-    setTimeout(emitLoop, 500);
+    setTimeout(emitLoop, 30);
 }
 createGame();
 gameLoop();
