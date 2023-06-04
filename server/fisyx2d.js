@@ -186,6 +186,29 @@ f2.World = class {
 
         this.constraints = {};
     }
+    copyNew(opts){
+        opts = opts || {};
+        this.gravity = opts.gravity || 0;
+        this.scale = opts.scale || 20;
+        this.gridSize = opts.gridSize || 20;
+
+        this.time = opts.time || 0
+
+        this.allBodies = {};
+        this.nextId = 0;
+
+        this.staticBodies = {};
+
+        this.dynamicBodies = {};
+
+        this.staticBodiesRegions = new f2.HashGrid();
+        this.dynamicBodiesRegions = new f2.HashGrid();
+
+        this.contactFilter = null;
+        this.contactListener = null;
+
+        this.constraints = {};
+    }
     setContactFilter(f) {
         this.contactFilter = f;
     }

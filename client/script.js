@@ -1,23 +1,17 @@
-const socket = io("https://multiplayer-circles.onrender.com", { transports: ['websocket', 'polling', 'flashsocket'] })
-// const socket = io("http://localhost:3000", { transports: ['websocket', 'polling', 'flashsocket'] })
+// const socket = io("https://multiplayer-circles.onrender.com", { transports: ['websocket', 'polling', 'flashsocket'] })
+const socket = io("http://localhost:3000", { transports: ['websocket', 'polling', 'flashsocket'] })
 
 var c;
 var game = new Game();
 socket.on("start", function(data){
-    if (!c){
-        c = data.c;
-
-        game = Game.deserialize(f2.parse(data.game));
-        game.playerPool.getPlayer(socket.id).isMe = true;
-
+    var alreadyStarted = c ? 1 : 0;
+    c = data.c;
+    game.useSerialized(f2.parse(data.game), timeDiff);
+    game.playerPool.getPlayer(socket.id).isMe = true;
+    if (!alreadyStarted){
         gameLoop();
         displayLoop();
         pingTest();
-    } else{
-        c = data.c;
-
-        game = Game.deserialize(f2.parse(data.game));
-        game.playerPool.getPlayer(socket.id).isMe = true;
     }
 })
 function pingTest(){
@@ -44,7 +38,9 @@ socket.on('test', function(data){
     // delay = ping
 })
 socket.on('update', function(data){
-    game.useSerializedUpdate(f2.parse(data));
+    //revert to last
+    game.useSerializedUpdate(f2.parse(data), timeDiff);
+    //record last
 })
 
 var canvas = document.createElement("canvas");
@@ -57,14 +53,33 @@ var controlsQueue = new ControlsQueue()
 controlsQueue.addEventListener("playerInput", (eData)=>{
     game.handleEvent(new Game.Event(socket.id, eData))
 });
+
+function getAngle(canvas, evt) {
+    var rect = canvas.getBoundingClientRect(), // abs. size of element
+        scaleX = canvas.width / rect.width,    // relationship bitmap vs. element for x
+        scaleY = canvas.height / rect.height;  // relationship bitmap vs. element for y
+
+    return (new f2.Vec2(
+        (evt.clientX - rect.left) * scaleX,   // scale mouse coordinates after they have
+        (evt.clientY - rect.top) * scaleY     // been adjusted to be relative to element
+    )).subtract(new f2.Vec2(canvas.width/2, canvas.height/2)).ang();
+}
 function onInput(event){
     if (event.repeat) { return }
+    var e;
+    if (["keydown", "keyup"].includes(event.type)){
+        e = {
+            key : event.key
+        };
+    } else if (["mousemove"].includes(event.type)){
+        e = {
+            angle : getAngle(canvas, event)
+        };
+    }
     var dataEmit = {
         eData : {
-            type : event.type, 
-            e : {
-                key : event.key
-            }
+            type : event.type,
+            e : e
         },
         time : timeDiff + Date.now()/1000 + delay
     };
@@ -73,6 +88,9 @@ function onInput(event){
 }
 document.body.addEventListener('keydown', onInput);
 document.body.addEventListener('keyup', onInput);
+document.body.addEventListener('mousemove', onInput);
+document.body.addEventListener('mousedown', onInput);
+document.body.addEventListener('mouseup', onInput);
 // document.body.addEventListener('keydown', (e) => {
 //     ball.position = new f2.Vec2(200, 200)
 //     ball.angle = 0
@@ -81,7 +99,7 @@ document.body.addEventListener('keyup', onInput);
 // })
 function step(dt) {
     controlsQueue.handleEvents(game.world.time, dt)
-    game.step(dt)
+    game.stepClient(dt)
 }
 function display(ctx, now){
     var canvas = ctx.canvas;

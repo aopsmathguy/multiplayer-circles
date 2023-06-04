@@ -4,13 +4,43 @@ var Game = class{
 	};
 	world;
 	playerPool;
+	projectilePool;
 	obstacles;
 	eventLog; //implement this so serializing updates works more efficiently
 	constructor(opts){
-    this.world = new f2.World({ gravity: 0, scale: 1, gridSize: 2, time: Date.now() / 1000 });
+		var that = this;
+
+    	this.world = new f2.World({ gravity: 0, scale: 1, gridSize: 2, time: Date.now() / 1000 });
+		this.world.setContactFilter(function(m){
+			return that.contactFilter(m.A, m.B);
+		});
+
 		this.playerPool = new Game.Player.Pool();
+		this.projectilePool = new Game.Projectile.Pool();
 		this.obstacles = new Game.Obstacles();
 		this.eventLog = [];
+	}
+	contactFilter(worldObjA, worldObjB){
+		var a = worldObjA.getUserData("gameObj");
+		var b = worldObjB.getUserData("gameObj");
+		var checkFuncs = {
+			"plyr" : {
+				"plyr" : function(){return true;},
+				"proj" : function(c,d){return c.id != d.originId;},
+				"obs" : function(){return true;}
+			},
+			"proj" : {
+				"plyr" : function(c,d){return d.id != c.originId},
+				"proj" : function(){return true;},
+				"obs" : function(){return true;}
+			},
+			"obs" : {
+				"plyr" : function(){return true;},
+				"proj" : function(){return true;},
+				"obs" : function(){return false;}
+			}
+		}
+		return checkFuncs[a.type][b.type](a.obj, b.obj);
 	}
 	display(ctx, opts, delT){
 		var followId = opts.followId || 0;
@@ -18,44 +48,55 @@ var Game = class{
 		var canvas = ctx.canvas;
 		ctx.save();
 		ctx.translate(canvas.width/2, canvas.height/2);
-    ctx.scale(scale,scale);
-    var world = this.world;
-    var plyr = this.playerPool.getPlayer(followId);
-    if (plyr){
-	    var placement = plyr.body.createPlacement(delT);
-			ctx.translate(-placement.position.x, -placement.position.y);
-    }
-    world.display(ctx, delT);
-    ctx.restore();
+	    ctx.scale(scale,scale);
+	    var world = this.world;
+	    var plyr = this.playerPool.getPlayer(followId);
+	    if (plyr){
+		    var placement = plyr.body.createPlacement(delT);
+				ctx.translate(-placement.position.x, -placement.position.y);
+	    }
+	    world.display(ctx, delT);
+	    ctx.restore();
 	}
 	static serialize(game){
 		var dataPlyrPool = {};
 		dataPlyrPool.playerMap = {};
 		for (var i in game.playerPool.playerMap){
 			dataPlyrPool.playerMap[i] = Game.Player.serialize(game.playerPool.playerMap[i]);
-		} 
+		}
+
+		var dataProjPool = {};
+		dataProjPool.projList = {};
+		for (var i in game.projectilePool.projList){
+			dataProjPool.projList[i] = Game.Projectile.serialize(game.projectilePool.projList[i]);
+		}
 		return {
-      wTime : game.world.time,
+      		wTime : game.world.time,
 			playerPool : dataPlyrPool,
+			projectilePool : dataProjPool,
 			obstacles : Game.Obstacles.serialize(game.obstacles)
 		};
 	}
-	static deserialize(data, timeDiff){
+	useSerialized(data, timeDiff){
 		timeDiff = timeDiff || 0;
-		var game = new Game();
-		game.world.time = data.wTime - timeDiff;
+		this.world.time = data.wTime - timeDiff;
 		for (var i in data.playerPool.playerMap){
-			game.addPlayer(
+			this.addPlayer(
 				Game.Player.deserialize(data.playerPool.playerMap[i]),
 				i
 			);
 		}
+		for (var i in data.projectilePool.projList){
+			this.addProj(
+				Game.Projectile.deserialize(data.projectilePool.projList[i]),
+				i
+			);
+		}
 		for (var i in data.obstacles.obstacles){
-			game.addObstacle(
+			this.addObstacle(
 				f2.Body.deserialize(data.obstacles.obstacles[i])
 			);
 		}
-		return game;
 	}
 	static serializeUpdate(game){
 		var dataPlyrPool = {};
@@ -63,28 +104,43 @@ var Game = class{
 		for (var i in game.playerPool.playerMap){
 			dataPlyrPool.playerMap[i] = Game.Player.serializeUpdate(game.playerPool.playerMap[i]);
 		}
+
+		var dataProjPool = {};
+		dataProjPool.projList = {};
+		for (var i in game.projectilePool.projList){
+			dataProjPool.projList[i] = Game.Projectile.serializeUpdate(game.projectilePool.projList[i]);
+		}
 		var eLog = [];
 		for (var i = 0 ; i < game.eventLog.length; i++){
 			eLog.push(Game.Event.serialize(game.eventLog[i]));
 		}
 		return {
-      wTime : game.world.time,
+      		wTime : game.world.time,
 			playerPool : dataPlyrPool,
+			projectilePool : dataProjPool,
 			eventLog : eLog
 		}
 	}
 	useSerializedUpdate(data, timeDiff){
 		timeDiff = timeDiff || 0;
 		var playerPool = data.playerPool;
+		var projectilePool = data.projectilePool;
 		var eventLog = data.eventLog;
 
 		for (var i = 0 ; i < eventLog.length; i++){
 			var e = eventLog[i];
+			var plyrOrigin = this.playerPool.getPlayer(e.origin);
+			if (plyrOrigin && plyrOrigin.isMe){
+				continue;
+			}
 			this.handleEvent(e);
 		}
 		this.world.time = data.wTime - timeDiff;
 		for (var i in playerPool.playerMap){
 			this.playerPool.getPlayer(i).useSerializedUpdate(playerPool.playerMap[i]);
+		}
+		for (var i in projectilePool.projList){
+			this.projectilePool.projList[i].useSerializedUpdate(projectilePool.projList[i]);
 		}
 	}
 	createMap(){
@@ -101,17 +157,35 @@ var Game = class{
 	}
 	addPlayer(p, id){
 		if (this.playerPool.getPlayer(id)){return;}
-		this.playerPool.addPlayer(p, id);//fix this
+		this.playerPool.addPlayer(p, id);
 		this.world.addBody(p.body);
+		p.id = id;
 	}
 	removePlayer(id){
 		var p = this.playerPool.getPlayer(id);
 		if (!p){return;}
-		this.playerPool.removePlayer(id);//fix this
+		this.playerPool.removePlayer(id);
+		this.world.removeBody(p.body);
+	}
+	fireBullet(player, id){
+		var proj = Game.Projectile.createFromPlayer(player);
+		this.addProj(proj, id);
+	}
+	addProj(p, id){
+		this.projectilePool.addProj(p, id);
+		this.world.addBody(p.body);
+	}
+	removeProj(p){
+		this.projectilePool.deleteProj(p);
 		this.world.removeBody(p.body);
 	}
 	step(dt){
-		this.playerPool.step(dt);
+		this.playerPool.step(this, dt);
+		this.projectilePool.step(this, dt)
+		this.world.step(dt);
+	}
+	stepClient(dt){//does not spawn bullets: only client side prediction for simple things
+		this.playerPool.stepClient(this, dt);
 		this.world.step(dt);
 	}
 	clearEventLog(){
@@ -133,6 +207,12 @@ var Game = class{
 				break;
 			case "leave":
 				this.removePlayer(e.id);
+				break;
+			case "newBullet":
+				this.fireBullet(this.playerPool.getPlayer(e.pid), e.id);
+				break;
+			case "removeBullet":
+				this.removeProj(this.projectilePool.projList[e.id]);
 				break;
 			}
 		}else{
@@ -206,16 +286,19 @@ Game.Obstacles = class{
 	addBody(b){
 		b.setCustomDisplayPlacement(function(ctx, placement){
 			ctx.save();
-      ctx.translate(placement.position.x, placement.position.y);
-      ctx.rotate(placement.angle);
-      for (var i = 0; i < this.shapes.length; i++) {
-          var s = this.shapes[i];
-          ctx.fillStyle = "rgba(255,0,0,0.4)";
-          ctx.strokeStyle = "rgba(255,0,0,1)";
-	        ctx.lineWidth = 0.1;
-          s.display(ctx);
-      }
-      ctx.restore();
+			ctx.translate(placement.position.x, placement.position.y);
+			ctx.rotate(placement.angle);
+			for (var i = 0; i < this.shapes.length; i++) {
+			  var s = this.shapes[i];
+			  ctx.fillStyle = "rgba(255,0,0,0.4)";
+			  ctx.strokeStyle = "rgba(255,0,0,1)";
+			    ctx.lineWidth = 0.05;
+			  s.display(ctx);
+			}
+			ctx.restore();
+		});
+		b.setUserData("gameObj", {
+			type : "obs"
 		});
 		this.obstacles.push(b);
 	}
@@ -230,41 +313,64 @@ Game.Obstacles = class{
 	}
 }
 Game.Player = class{
-	body;
 	cfg;
+	body;
 	inputs;
+	id;
 	isMe;
+
+	shootTimer;
 	constructor(cfg){
+		this.cfg = new Game.Player.Config(cfg);
+
 		this.body = new f2.CircleBody({
-		  radius : 0.5,
+		  radius : this.cfg.radius,
 			mass : 1,
 			inertia : Infinity
 		});
 		var that = this;
 		this.body.setCustomDisplayPlacement(function(ctx, placement){
 			ctx.save();
-      ctx.translate(placement.position.x, placement.position.y);
-      ctx.rotate(placement.angle);
-      if (that.isMe){
-	      ctx.fillStyle = "rgba(0,255,0,0.4)";
-	      ctx.strokeStyle = "rgba(0,255,0,1)";
-      } else{
-	      ctx.fillStyle = "rgba(0,0,255,0.4)";
-	      ctx.strokeStyle = "rgba(0,0,255,1)";
-      }
-      ctx.lineWidth = 0.1;
-      for (var i = 0; i < this.shapes.length; i++) {
-          var s = this.shapes[i];
-          s.display(ctx);
-      }
-      ctx.restore();
+			ctx.translate(placement.position.x, placement.position.y);
+			ctx.rotate(placement.angle);
+			if (that.isMe){
+			    if (that.inputs.mouseDown){
+				    ctx.fillStyle = "rgba(0,255,0,0.8)";
+				    ctx.strokeStyle = "rgba(0,255,0,1)";
+				}else{
+				    ctx.fillStyle = "rgba(0,255,0,0.4)";
+				    ctx.strokeStyle = "rgba(0,255,0,1)";
+				}
+			} else{
+				if (that.inputs.mouseDown){
+					ctx.fillStyle = "rgba(0,0,255,0.8)";
+					ctx.strokeStyle = "rgba(0,0,255,1)";
+				}else{
+					ctx.fillStyle = "rgba(0,0,255,0.4)";
+					ctx.strokeStyle = "rgba(0,0,255,1)";
+				}
+			}
+			ctx.lineWidth = 0.05;
+			ctx.beginPath();
+			ctx.arc(0,0,that.cfg.radius, 0, 2 * Math.PI);
+			ctx.fill();
+			ctx.stroke();
+			ctx.beginPath();
+			ctx.moveTo(0,0);
+			ctx.lineTo(that.cfg.radius, 0);
+			ctx.stroke();
+			ctx.restore();
 		});
-		this.body.setUserData("player", this);
-		this.cfg = new Game.Player.Config(cfg);
+		this.body.setUserData("gameObj", {
+			type : "plyr",
+			obj : this
+		});
 
 		this.inputs = new Game.Player.Inputs();
 
 		this.isMe = false;
+
+		this.shootTimer = 0;
 	}
 	handleInputEvent(ie){
 		switch(ie.type){
@@ -274,9 +380,18 @@ Game.Player = class{
 			case "keyup":
 				this.inputs.keysPressed.delete(ie.e.key);
 				break;
+			case "mousemove":
+				this.inputs.angle = ie.e.angle;
+				break;
+			case "mousedown":
+				this.inputs.mouseDown = true;
+				break;
+			case "mouseup":
+				this.inputs.mouseDown = false;
+				break;
 		}
 	}
-	step(dt){
+	move(dt){
 		var cfg = this.cfg;
 
 		var inp = this.inputs;
@@ -289,6 +404,37 @@ Game.Player = class{
 
 		var bd = this.body;
 		bd.velocity = bd.velocity.add(m.subtract(bd.velocity).multiply(cfg.accConst*dt));
+		bd.angleVelocity = 0;
+		bd.angle = this.inputs.angle;
+	}
+	step(game, dt){
+		var cfg = this.cfg;
+
+		var inp = this.inputs;
+		this.move(dt);
+
+		this.shootTimer -= dt;
+		if (inp.mouseDown && this.shootTimer <= 0){
+			this.shootTimer = 60/cfg.fireRate;
+			game.onEvent(new Game.Event(0, {
+		        type : "newBullet",
+		        e : {
+					id : Game.makeid(6),
+		            pid : this.id
+		        }
+		    }));
+		}
+	}
+	stepClient(game, dt){
+		var cfg = this.cfg;
+
+		var inp = this.inputs;
+		this.move(dt);
+
+		this.shootTimer -= dt;
+		if (inp.mouseDown && this.shootTimer <= 0){
+			this.shootTimer = 60/cfg.fireRate;
+		}
 	}
 	static serialize(plyr){
 		return {
@@ -305,25 +451,42 @@ Game.Player = class{
 	}
 	static serializeUpdate(plyr){
 		return {
-			body : f2.Body.serializeDynamics(plyr.body)
+			body : f2.Body.serializeDynamics(plyr.body),
+			shootTimer : plyr.shootTimer
 		}
 	}
 	useSerializedUpdate(data){
 		this.body.updateDynamics(data.body);
+		this.shootTimer = data.shootTimer;
 	}
 }
 Game.Player.Config = class{
+	radius;
 	maxSpeed;
 	accConst;
+
+	projSpeed;
+	fireRate;
+	inaccuracy;
+	projCfg;
 	constructor(opts){
 		opts = opts || {};
+		this.radius = opts.radius || 1;
 		this.maxSpeed = opts.maxSpeed || 4;
 		this.accConst = opts.accConst || 1;
+		this.projSpeed = opts.projSpeed || 20;
+		this.fireRate = opts.fireRate || 600;
+		this.inaccuracy = opts.inaccuracy || 0.2;
+		this.projCfg = new Game.Projectile.Config(opts.projCfg);
 	}
 	static serialize(cfg){
 		return {
+			radius : cfg.radius,
 			maxSpeed : cfg.maxSpeed,
-			accConst : cfg.accConst
+			accConst : cfg.accConst,
+			projSpeed : cfg.projSpeed,
+			fireRate : cfg.fireRate,
+			projCfg : Game.Projectile.Config.serialize(cfg.projCfg)
 		}
 	}
 	static deserialize(data){
@@ -344,26 +507,41 @@ Game.Player.Pool = class{
 	removePlayer(id){
 		delete this.playerMap[id];
 	}
-	step(dt){
+	step(game, dt){
 		for (var p in this.playerMap){
-			this.getPlayer(p).step(dt);
+			this.getPlayer(p).step(game, dt);
+		}
+	}
+	stepClient(game, dt){
+		for (var p in this.playerMap){
+			this.getPlayer(p).stepClient(game, dt);
 		}
 	}
 
 }
 Game.Player.Inputs = class{
 	keysPressed;
+
+	angle;
+	mouseDown;
 	constructor(opts){
 		opts = opts || {};
 		this.keysPressed = new Set(opts.keysPressed || []);
+
+		this.angle = opts.angle || 0;
+		this.mouseDown = opts.mouseDown == undefined ? false : true;
 	}
 	static serialize(inp){
 		return {
-			keysPressed : Array.from(inp.keysPressed)
+			keysPressed : Array.from(inp.keysPressed),
+			angle : inp.angle,
+			mouseDown : inp.mouseDown
 		}
 	}
 	useSerializedData(data){
 		this.keysPressed = new Set(data.keysPressed);
+		this.angle = data.angle;
+		this.mouseDown = data.mouseDown;
 	}
 }
 Game.Player.InputEvent = class{
@@ -372,5 +550,120 @@ Game.Player.InputEvent = class{
 	constructor(opts){
 		this.type = opts.type;
 		this.e = opts.e;
+	}
+}
+Game.Projectile = class{
+	body;
+	timeLeft;
+	cfg;
+
+	id;
+	originId;
+
+	constructor(cfg){
+		this.cfg = cfg;
+		this.body = new f2.RectBody(cfg.body);
+		this.body.setCustomDisplayPlacement(function(ctx, placement){
+			ctx.save();
+			ctx.translate(placement.position.x, placement.position.y);
+			ctx.rotate(placement.angle);
+			for (var i = 0; i < this.shapes.length; i++) {
+			  var s = this.shapes[i];
+			  ctx.fillStyle = "rgba(255,255,0,0.4)";
+			  ctx.strokeStyle = "rgba(255,255,0,1)";
+			  ctx.lineWidth = 0.05;
+			  s.display(ctx);
+			}
+			ctx.restore();
+		});
+		this.body.setUserData("gameObj", {
+			type : "proj",
+			obj : this
+		});
+		this.timeLeft = cfg.expireT;
+	}
+	static createFromPlayer(player){
+		var proj = new Game.Projectile(player.cfg.projCfg);
+		proj.body.position = player.body.position;
+		proj.body.angle = player.body.angle + (Math.random() - 0.5) * player.cfg.inaccuracy;
+		proj.body.velocity = player.body.velocity.add(f2.Vec2.fromPolar(player.cfg.projSpeed, proj.body.angle));
+		proj.body.angleVelocity = 0;
+		proj.originId = player.id;
+		return proj;
+	}
+	static serialize(proj){
+		return {
+			body : f2.Body.serializeDynamics(proj.body),
+			cfg : Game.Projectile.Config.serialize(proj.cfg),
+			originId : proj.originId
+		}
+	}
+	static deserialize(data){
+		var proj = new Game.Projectile(data.cfg);
+		proj.body.updateDynamics(data.body);
+		proj.originId = data.originId;
+		return proj;
+	}
+	static serializeUpdate(proj){
+		return {
+			body : f2.Body.serializeDynamics(proj.body)
+		}
+	}
+	useSerializedUpdate(data){
+		this.body.updateDynamics(data.body);
+	}
+	step(game, dt){
+		this.timeLeft -= dt;
+		if (this.timeLeft <= 0){
+			game.onEvent(new Game.Event(0, {
+		        type : "removeBullet",
+		        e : {
+					id : this.id
+		        }
+		    }));
+		}
+	}
+}
+Game.Projectile.Config = class{
+	damage;
+	expireT;
+	body;
+	constructor(opts){
+		opts = opts || {};
+		this.damage = opts.damage || 5;
+		this.expireT = opts.expireT || 1;
+		this.body = opts.body || {
+			width : 0.1,
+			length : 0.5,
+			mass : 0.5
+		};
+	}
+	static serialize(cfg){
+		return {
+			damage : cfg.damage,
+			expireT : cfg.expireT,
+			body : cfg.body
+		}
+	}
+	static deserialize(data){
+		return new Game.Projectile.Config(data);
+	}
+}
+Game.Projectile.Pool = class{
+	projList;
+	constructor(opts){
+		this.projList = {};
+	}
+	step(game, dt){
+		for (var p in this.projList){
+			this.projList[p].step(game, dt);
+		}
+	}
+	addProj(proj, id){
+		proj.id = id;
+		this.projList[proj.id] = proj;
+	}
+	deleteProj(proj){
+		delete this.projList[proj.id];
 	}
 }

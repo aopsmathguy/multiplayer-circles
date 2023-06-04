@@ -16,13 +16,13 @@ const { ControlsQueue } = require('./controlsQueue.js');
 const { Game } = require('./game.js');
 
 var c = {
-    physicsStep : 0.01
+    physicsStep : 0.005
 }
 var game;
 var controlsQueues = {};
 io.on("connection", function onJoin(client){
     game.onEvent(new Game.Event(0, {
-        type : "join", 
+        type : "join",
         e : {
             id : client.id,
             cfg : {
@@ -45,7 +45,7 @@ io.on("connection", function onJoin(client){
     })
     client.on('disconnect', function(){
         game.onEvent(new Game.Event(0, {
-            type : "leave", 
+            type : "leave",
             e : {
                 id : client.id
             }
@@ -80,7 +80,7 @@ function gameLoop() {
 function emitLoop(){
     io.sockets.emit('update', f2.stringify(Game.serializeUpdate(game)));
     game.clearEventLog();
-    setTimeout(emitLoop, 30);
+    setTimeout(emitLoop, 50);
 }
 createGame();
 gameLoop();
