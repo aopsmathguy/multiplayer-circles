@@ -1,13 +1,16 @@
-const socket = io("https://multiplayer-circles.onrender.com", { transports: ['websocket', 'polling', 'flashsocket'] })
-// const socket = io("http://localhost:3000", { transports: ['websocket', 'polling', 'flashsocket'] })
+// const socket = io("https://multiplayer-circles.onrender.com", { transports: ['websocket', 'polling', 'flashsocket'] })
+const socket = io("http://localhost:3000", { transports: ['websocket', 'polling', 'flashsocket'] })
 
 var c;
 var game = new Game();
+var lastState;
 socket.on("start", function(data){
     var alreadyStarted = c ? 1 : 0;
     c = data.c;
     game.useSerialized(f2.parse(data.game), timeDiff);
     game.playerPool.getPlayer(socket.id).isMe = true;
+    game.dt = c.physicsStep;
+    lastState = Game.saveStateInfo(game);
     if (!alreadyStarted){
         gameLoop();
         displayLoop();
@@ -38,9 +41,9 @@ socket.on('test', function(data){
     // delay = ping
 })
 socket.on('update', function(data){
-    //revert to last
+    game.useStateInfo(lastState);
     game.useSerializedUpdate(f2.parse(data), timeDiff);
-    //record last
+    lastState = Game.saveStateInfo(game);
 })
 
 var canvas = document.createElement("canvas");
@@ -91,15 +94,10 @@ document.body.addEventListener('keyup', onInput);
 document.body.addEventListener('mousemove', onInput);
 document.body.addEventListener('mousedown', onInput);
 document.body.addEventListener('mouseup', onInput);
-// document.body.addEventListener('keydown', (e) => {
-//     ball.position = new f2.Vec2(200, 200)
-//     ball.angle = 0
-//     ball.velocity = new f2.Vec2(0, 0)
-//     ball.angleVelocity = 0
-// })
-function step(dt) {
-    controlsQueue.handleEvents(game.world.time, dt)
-    game.stepClient(dt)
+function step() {
+    controlsQueue.handleEvents(game.world.time, game.dt);
+    // game.stepClient(dt)
+    game.step(true);
 }
 function display(ctx, now){
     var canvas = ctx.canvas;
@@ -113,7 +111,7 @@ function gameLoop() {
     var world = game.world;
     var now = Date.now() / 1000
     while (world.time < now) {
-        step(c.physicsStep)
+        step()
     }
     setTimeout(gameLoop, 1000 * c.physicsStep);
     // setTimeout(gameLoop, 1);
