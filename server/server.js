@@ -60,20 +60,20 @@ function createGame(){
     game = new Game();
     game.createMap();
 }
-function step(dt) {
+function step() {
     var world = game.world;
     for (var i in controlsQueues){
         var cd = controlsQueues[i];
-        cd.handleEvents(world.time, dt);
+        cd.handleEvents(world.time, game.dt);
         cd.removeEvents(world.time)
     }
-    game.step(dt);
+    game.step();
 }
 function gameLoop() {
     var world = game.world;
     now = Date.now() / 1000
     while (world.time < now) {
-        step(c.physicsStep)
+        step()
     }
     setTimeout(gameLoop, c.physicsStep * 1000)
 }
