@@ -19,6 +19,10 @@ var Game = class{
 		this.world.setContactFilter(function(m){
 			return that.contactFilter(m.A, m.B);
 		});
+		this.world.setContactListener(function(m){
+			// console.log(m);
+			that.contactListener(m.A, m.B);
+		});
 
 		this.playerPool = new Game.Player.Pool();
 		this.projectilePool = new Game.Projectile.Pool();
@@ -48,6 +52,36 @@ var Game = class{
 			}
 		}
 		return checkFuncs[a.type][b.type](a.obj, b.obj);
+	}
+	contactListener(worldObjA, worldObjB){
+		var a = worldObjA.getUserData("gameObj");
+		var b = worldObjB.getUserData("gameObj");
+		var checkFuncs = {
+			"plyr" : {
+				"plyr" : function(){},
+				"proj" : function(a, b){
+					b.timeLeft = 0
+				},
+				"obs" : function(){}
+			},
+			"proj" : {
+				"plyr" : function(a, b){
+					a.timeLeft = 0
+				},
+				"proj" : function(){},
+				"obs" : function(a, b){
+					a.timeLeft = 0
+				}
+			},
+			"obs" : {
+				"plyr" : function(){},
+				"proj" : function(a, b){
+					b.timeLeft = 0
+				},
+				"obs" : function(){}
+			}
+		}
+		checkFuncs[a.type][b.type](a.obj, b.obj);
 	}
 	display(ctx, opts, delT){
 		var followId = opts.followId || 0;
@@ -93,7 +127,7 @@ var Game = class{
 		for (var i in this.projectilePool.projList){
 			this.removeProj(this.projectilePool.projList[i]);
 		}
-		console.log(this.projectilePool);
+		// console.log(this.projectilePool.projList);
 		for (var i in data.projectilePool.projList){
 			this.addProj(
 				Game.Projectile.deserialize(data.projectilePool.projList[i]),
@@ -231,7 +265,7 @@ var Game = class{
 				}
 			}
 			delete this.eventLog[this.gamestepNumber];
-			this.step(true);
+			this.step(2);
 		}
 		var events = this.eventLog[this.gamestepNumber]
 		if (events){
@@ -241,9 +275,10 @@ var Game = class{
 			}
 		}
 		delete this.eventLog[this.gamestepNumber];
-		this.clearEventLog();
+		// console.log(this.eventLog)
+		// this.clearEventLog();
 	}
-	step(client = false){
+	step(client = 0){
 		var dt = this.dt;
 		this.gamestepNumber += 1;
 		this.playerPool.step(this, client);
@@ -286,6 +321,15 @@ var Game = class{
 			if (player){
 				player.handleInputEvent(data);
 			}
+		}
+	}
+	doEvent(e, client){
+		if (client == 0){
+			this.onEvent(e);
+		} else if (client == 1){
+			this.handleEvent(e);
+		} else if (client == 2){
+
 		}
 	}
 	// handleEvents(){
@@ -472,7 +516,7 @@ Game.Player = class{
 		bd.angleVelocity = 0;
 		bd.angle = this.inputs.angle;
 	}
-	step(game, client = false){
+	step(game, client = 0){
 		var dt = game.dt;
 
 		var cfg = this.cfg;
@@ -482,15 +526,14 @@ Game.Player = class{
 		this.shootTimer -= dt;
 		if (inp.mouseDown && this.shootTimer <= 0){
 			this.shootTimer = 60/cfg.fireRate;
-			if (!client){
-				game.onEvent(new Game.Event(0, {
-			        type : "newBullet",
-			        e : {
-						id : Game.makeid(6),
-			            pid : this.id
-			        }
-			    }));
-			}
+			var e = new Game.Event(0, {
+				type : "newBullet",
+				e : {
+					id : Game.makeid(6),
+					pid : this.id
+				}
+			});
+			game.doEvent(e, client);
 		}
 
 		this.move(dt);
@@ -564,7 +607,7 @@ Game.Player.Pool = class{
 	removePlayer(id){
 		delete this.playerMap[id];
 	}
-	step(game, client = false){
+	step(game, client = 0){
 		for (var p in this.playerMap){
 			this.getPlayer(p).step(game, client);
 		}
@@ -664,16 +707,17 @@ Game.Projectile = class{
 	useSerializedUpdate(data){
 		this.body.updateDynamics(data.body);
 	}
-	step(game){
+	step(game, client = 0){
 		var dt = game.dt;
 		this.timeLeft -= dt;
 		if (this.timeLeft <= 0){
-			game.onEvent(new Game.Event(0, {
-		        type : "removeBullet",
-		        e : {
+			var e = new Game.Event(0, {
+				type : "removeBullet",
+				e : {
 					id : this.id
-		        }
-		    }));
+				}
+			});
+			game.doEvent(e, client);
 		}
 	}
 }
@@ -707,11 +751,9 @@ Game.Projectile.Pool = class{
 	constructor(opts){
 		this.projList = {};
 	}
-	step(game, client){
-		if (!client){
-			for (var p in this.projList){
-				this.projList[p].step(game);
-			}
+	step(game, client = 0){
+		for (var p in this.projList){
+			this.projList[p].step(game, client);
 		}
 	}
 	addProj(proj, id){

@@ -406,9 +406,9 @@ f2.World = class {
                         if (m.moved) {
                             newMoved.add(i);
                             newMoved.add(idx);
-                        }
-                        for (var i = 0; i < m.collisions.length; i++) {
-                            this.doContactListener(m.collisions[i]);
+                            for (var i = 0; i < m.collisions.length; i++) {
+                                this.doContactListener(m.collisions[i]);
+                            }
                         }
                     }
                 }
@@ -432,9 +432,9 @@ f2.World = class {
                         var m = f2.intersect(body, oBody);
                         if (m.moved) {
                             newMoved.add(i);
-                        }
-                        for (var i = 0; i < m.collisions.length; i++) {
-                            this.doContactListener(m.collisions[i]);
+                            for (var i = 0; i < m.collisions.length; i++) {
+                                this.doContactListener(m.collisions[i]);
+                            }
                         }
                     }
                 };

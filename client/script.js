@@ -1,5 +1,5 @@
-const socket = io("https://multiplayer-circles.onrender.com", { transports: ['websocket', 'polling', 'flashsocket'] })
-// const socket = io("http://localhost:3000", { transports: ['websocket', 'polling', 'flashsocket'] })
+// const socket = io("https://multiplayer-circles.onrender.com", { transports: ['websocket', 'polling', 'flashsocket'] })
+const socket = io("http://localhost:3000", { transports: ['websocket', 'polling', 'flashsocket'] })
 
 var c;
 var game = new Game();
@@ -97,7 +97,7 @@ document.body.addEventListener('mouseup', onInput);
 function step() {
     controlsQueue.handleEvents(game.world.time, game.dt);
     // game.stepClient(dt)
-    game.step(true);
+    game.step(1);
 }
 function display(ctx, now){
     var canvas = ctx.canvas;
