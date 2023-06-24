@@ -186,29 +186,6 @@ f2.World = class {
 
         this.constraints = {};
     }
-    copyNew(opts){
-        opts = opts || {};
-        this.gravity = opts.gravity || 0;
-        this.scale = opts.scale || 20;
-        this.gridSize = opts.gridSize || 20;
-
-        this.time = opts.time || 0
-
-        this.allBodies = {};
-        this.nextId = 0;
-
-        this.staticBodies = {};
-
-        this.dynamicBodies = {};
-
-        this.staticBodiesRegions = new f2.HashGrid();
-        this.dynamicBodiesRegions = new f2.HashGrid();
-
-        this.contactFilter = null;
-        this.contactListener = null;
-
-        this.constraints = {};
-    }
     setContactFilter(f) {
         this.contactFilter = f;
     }
@@ -429,9 +406,9 @@ f2.World = class {
                         if (m.moved) {
                             newMoved.add(i);
                             newMoved.add(idx);
-                        }
-                        for (var i = 0; i < m.collisions.length; i++) {
-                            this.doContactListener(m.collisions[i]);
+                            for (var i = 0; i < m.collisions.length; i++) {
+                                this.doContactListener(m.collisions[i]);
+                            }
                         }
                     }
                 }
@@ -455,9 +432,9 @@ f2.World = class {
                         var m = f2.intersect(body, oBody);
                         if (m.moved) {
                             newMoved.add(i);
-                        }
-                        for (var i = 0; i < m.collisions.length; i++) {
-                            this.doContactListener(m.collisions[i]);
+                            for (var i = 0; i < m.collisions.length; i++) {
+                                this.doContactListener(m.collisions[i]);
+                            }
                         }
                     }
                 };
@@ -1135,6 +1112,7 @@ f2.parse = function(obj) {
         return value === "Infinity2374852783457827" ? Infinity : value;
     });
 }
+
 module.exports = {
   f2
 }
