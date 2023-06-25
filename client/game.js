@@ -20,7 +20,6 @@ var Game = class{
 			return that.contactFilter(m.A, m.B);
 		});
 		this.world.setContactListener(function(m){
-			// console.log(m);
 			that.contactListener(m.A, m.B);
 		});
 
@@ -99,11 +98,11 @@ var Game = class{
 	    world.display(ctx, delT);
 	    ctx.restore();
 	}
-	static saveStateInfo(game){
+	static saveStateInfo(game){//do inputs as well dumbass
 		var dataPlyrPool = {};
 		dataPlyrPool.playerMap = {};
 		for (var i in game.playerPool.playerMap){
-			dataPlyrPool.playerMap[i] = Game.Player.serializeUpdate(game.playerPool.playerMap[i]);
+			dataPlyrPool.playerMap[i] = Game.Player.saveStateInfo(game.playerPool.playerMap[i]);
 		}
 
 		var dataProjPool = {};
@@ -122,7 +121,7 @@ var Game = class{
 		this.gamestepNumber = data.gamestepNumber;
 		this.world.time = data.wTime;
 		for (var i in data.playerPool.playerMap){
-			this.playerPool.playerMap[i].useSerializedUpdate(data.playerPool.playerMap[i]);
+			this.playerPool.playerMap[i].restoreStateInfo(data.playerPool.playerMap[i]);
 		}
 		for (var i in this.projectilePool.projList){
 			this.removeProj(this.projectilePool.projList[i]);
@@ -175,6 +174,58 @@ var Game = class{
 				f2.Body.deserialize(data.obstacles.obstacles[i])
 			);
 		}
+	}
+	static encodeKeys(data, keywords){
+		function encode(obj){
+			var out;
+			if (Array.isArray(obj)){
+				out = [];
+		        for (var i = 0; i < obj.length; i++){
+		            out[i] = encode(obj[i]);
+		        }
+		    } else if (typeof obj === 'object'){
+				out = {};
+		        for (var i in obj){
+					var key = keywords.revGet(i);
+					if (key == undefined){
+						// console.log(i)
+						key = i;
+					}
+		            out[key] = encode(obj[i]);
+		        }
+		    } else{
+				if (typeof obj == 'number' && !Number.isInteger(obj)){
+					out = Number.parseFloat(obj.toFixed(3))
+				}else{
+					out = obj;
+				}
+			}
+			return out;
+		} return encode(data);
+	}
+	static decodeKeys(data, keywords){
+		function decode(obj){
+			var out;
+			if (Array.isArray(obj)){
+				out = [];
+				for (var i = 0; i < obj.length; i++){
+					out[i] = decode(obj[i]);
+				}
+			} else if (typeof obj === 'object'){
+				out = {};
+				for (var i in obj){
+					var key = keywords.get(i);
+					if (key == undefined){
+						// console.log(i)
+						key = i;
+					}
+					out[key] = decode(obj[i]);
+				}
+			}else{
+				out = obj;
+			}
+			return out;
+		} return decode(data);
 	}
 	static serializeUpdate(game){
 		var dataPlyrPool = {};
@@ -300,18 +351,18 @@ var Game = class{
 		if (e.origin === 0){
 			var e = data.e;
 			switch(data.type){
-			case "join":
+			case "j":
 				if (this.playerPool.getPlayer(e.id)){return;}
 				var plyr = new Game.Player(e.cfg);
 				this.addPlayer(plyr, e.id);
 				break;
-			case "leave":
+			case "l":
 				this.removePlayer(e.id);
 				break;
-			case "newBullet":
+			case "nb":
 				this.fireBullet(this.playerPool.getPlayer(e.pid), e.id);
 				break;
-			case "removeBullet":
+			case "rb":
 				this.removeProj(this.projectilePool.projList[e.id]);
 				break;
 			}
@@ -338,6 +389,31 @@ var Game = class{
 	// 	}
 	// }
 }
+Game.Utils = {};
+Game.Utils.TwoWayMap = class {
+    constructor(map) {
+       this.map = map;
+       this.reverseMap = {};
+       for(const key in map) {
+          const value = map[key];
+          this.reverseMap[value] = key;
+       }
+    }
+    get(key) { return this.map[key]; }
+    revGet(key) { return this.reverseMap[key]; }
+}
+Game.Utils.makeid = function(length) {
+  let result = '';
+  const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  const charactersLength = characters.length;
+  let counter = 0;
+  while (counter < length) {
+    result += characters.charAt (Math.floor (Math.random () * charactersLength));
+    counter += 1;
+  }
+  return result;
+}
+
 Game.Event = class {
 	origin;//0 means system event (not player emitted)
 	eData;
@@ -357,17 +433,6 @@ Game.Event = class {
 	toString(){
 		return "(o: " + this.origin + ", data: " + JSON.stringify(this.eData) + ")";
 	}
-}
-Game.makeid = function(length) {
-  let result = '';
-  const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  const charactersLength = characters.length;
-  let counter = 0;
-  while (counter < length) {
-    result += characters.charAt (Math.floor (Math.random () * charactersLength));
-    counter += 1;
-  }
-  return result;
 }
 Game.generateMap = function(opts){
 	opts = opts || {};
@@ -527,9 +592,9 @@ Game.Player = class{
 		if (inp.mouseDown && this.shootTimer <= 0){
 			this.shootTimer = 60/cfg.fireRate;
 			var e = new Game.Event(0, {
-				type : "newBullet",
+				type : "nb",
 				e : {
-					id : Game.makeid(6),
+					id : Game.Utils.makeid(4),
 					pid : this.id
 				}
 			});
@@ -550,6 +615,18 @@ Game.Player = class{
 		plyr.body.updateDynamics(data.body);
 		plyr.inputs.useSerializedData(data.inputs);
 		return plyr;
+	}
+	static saveStateInfo(plyr){
+		return {
+			body : f2.Body.serializeDynamics(plyr.body),
+			inputs : Game.Player.Inputs.serialize(plyr.inputs),
+			shootTimer : plyr.shootTimer
+		}
+	}
+	restoreStateInfo(data){
+		this.body.updateDynamics(data.body);
+		this.inputs.useSerializedData(data.inputs);
+		this.shootTimer = data.shootTimer;
 	}
 	static serializeUpdate(plyr){
 		return {
@@ -712,7 +789,7 @@ Game.Projectile = class{
 		this.timeLeft -= dt;
 		if (this.timeLeft <= 0){
 			var e = new Game.Event(0, {
-				type : "removeBullet",
+				type : "rb",
 				e : {
 					id : this.id
 				}

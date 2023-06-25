@@ -2,13 +2,18 @@ const socket = io("https://multiplayer-circles.onrender.com", { transports: ['we
 // const socket = io("http://localhost:3000", { transports: ['websocket', 'polling', 'flashsocket'] })
 
 var c;
+var keywords;
 var game = new Game();
 var lastState;
+var myId;
 socket.on("start", function(data){
     var alreadyStarted = c ? 1 : 0;
     c = data.c;
-    game.useSerialized(f2.parse(data.game), timeDiff);
-    game.playerPool.getPlayer(socket.id).isMe = true;
+    keywords = new Game.Utils.TwoWayMap(c.keywords);
+
+    myId = data.id;
+    game.useSerialized(Game.decodeKeys(f2.parse(data.game), keywords), timeDiff);
+    game.playerPool.getPlayer(myId).isMe = true;
     game.dt = c.physicsStep;
     lastState = Game.saveStateInfo(game);
     if (!alreadyStarted){
@@ -41,8 +46,9 @@ socket.on('test', function(data){
     // delay = ping
 })
 socket.on('update', function(data){
-    game.useStateInfo(lastState);
-    game.useSerializedUpdate(f2.parse(data), timeDiff);
+    // console.log(f2.parse(data));
+    game.useStateInfo(lastState);//something wrong with inputs when doing this stuff
+    game.useSerializedUpdate(Game.decodeKeys(f2.parse(data), keywords), timeDiff);
     lastState = Game.saveStateInfo(game);
 })
 
@@ -54,7 +60,7 @@ document.body.appendChild(canvas);
 
 var controlsQueue = new ControlsQueue()
 controlsQueue.addEventListener("playerInput", (eData)=>{
-    game.handleEvent(new Game.Event(socket.id, eData))
+    game.handleEvent(new Game.Event(myId, eData))
 });
 
 function getAngle(canvas, evt) {
@@ -103,7 +109,7 @@ function display(ctx, now){
     var canvas = ctx.canvas;
     ctx.clearRect(0,0,canvas.width,canvas.height);
     var world = game.world;
-    game.display(ctx, {followId : socket.id, scale : 40}, (now - world.time));
+    game.display(ctx, {followId : myId, scale : 40}, (now - world.time));
 }
 var prevTimes = [];
 var fps = 0;
