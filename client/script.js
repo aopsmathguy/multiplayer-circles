@@ -1,11 +1,14 @@
-const socket = io("https://multiplayer-circles.onrender.com", { transports: ['websocket', 'polling', 'flashsocket'] })
-// const socket = io("http://localhost:3000", { transports: ['websocket', 'polling', 'flashsocket'] })
+// const socket = io("https://multiplayer-circles.onrender.com", { transports: ['websocket', 'polling', 'flashsocket'] })
+const socket = io("http://localhost:3000", { transports: ['websocket', 'polling', 'flashsocket'] })
 
 var c;
 var keywords;
 var game = new Game();
 var lastState;
 var myId;
+function join(){
+    socket.emit("join");
+}
 socket.on("start", function(data){
     var alreadyStarted = c ? 1 : 0;
     c = data.c;
@@ -13,7 +16,7 @@ socket.on("start", function(data){
 
     myId = data.id;
     game.useSerialized(Game.decodeKeys(f2.parse(data.game), keywords), timeDiff);
-    game.playerPool.getPlayer(myId).isMe = true;
+
     game.dt = c.physicsStep;
     lastState = Game.saveStateInfo(game);
     if (!alreadyStarted){
@@ -58,6 +61,11 @@ canvas.height = window.innerHeight
 var ctx = canvas.getContext("2d");
 document.body.appendChild(canvas);
 
+var button = document.createElement("button");
+button.innerHTML = "join";
+button.onclick = join;
+document.body.appendChild(button);
+
 var controlsQueue = new ControlsQueue()
 controlsQueue.addEventListener("playerInput", (eData)=>{
     game.handleEvent(new Game.Event(myId, eData))
@@ -101,6 +109,12 @@ document.body.addEventListener('mousemove', onInput);
 document.body.addEventListener('mousedown', onInput);
 document.body.addEventListener('mouseup', onInput);
 function step() {
+    if (game.playerPool.getPlayer(myId)){
+        game.playerPool.getPlayer(myId).isMe = true;
+        button.hidden = true;
+    } else{
+        button.hidden = false;
+    }
     controlsQueue.handleEvents(game.world.time, game.dt);
     // game.stepClient(dt)
     game.step(1);

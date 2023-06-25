@@ -59,13 +59,19 @@ var Game = class{
 			"plyr" : {
 				"plyr" : function(){},
 				"proj" : function(a, b){
-					b.timeLeft = 0
+					if (b.timeLeft > 0){
+						b.timeLeft = 0
+						a.health -= b.cfg.damage;
+					}
 				},
 				"obs" : function(){}
 			},
 			"proj" : {
 				"plyr" : function(a, b){
-					a.timeLeft = 0
+					if (a.timeLeft > 0){
+						a.timeLeft = 0
+						b.health -= a.cfg.damage;
+					}
 				},
 				"proj" : function(){},
 				"obs" : function(a, b){
@@ -383,6 +389,11 @@ var Game = class{
 
 		}
 	}
+	doServerOnlyEvent(e, client){
+		if (client == 0){
+			this.onEvent(e);
+		}
+	}
 	// handleEvents(){
 	// 	for (var i = 0; i < this.eventLog.length; i++){
 	// 		this.handleEvent(this.eventLog[i]);
@@ -446,7 +457,7 @@ Game.generateMap = function(opts){
 			mass : Infinity,
 			width : horizontal + 1,
 			length : 5 - horizontal,
-			position : new f2.Vec2(width * Math.random(), length * Math.random())
+			position : new f2.Vec2(Math.floor(width * Math.random()), Math.floor(length * Math.random()))
 		}));
 	}
 	return lst;
@@ -492,6 +503,7 @@ Game.Player = class{
 	inputs;
 	id;
 	isMe;
+	health;
 
 	shootTimer;
 	constructor(cfg){
@@ -531,9 +543,19 @@ Game.Player = class{
 			ctx.stroke();
 			ctx.beginPath();
 			ctx.moveTo(0,0);
-			ctx.lineTo(that.cfg.radius, 0);
+			ctx.lineTo(that.cfg.gunLength, 0);
 			ctx.stroke();
+
+			ctx.strokeStyle = "rgba(255,255,255,0.7)";
+			ctx.beginPath();
+			ctx.moveTo(that.cfg.gunLength, 0);
+			ctx.lineTo(that.cfg.gunLength * that.health/100, 0);
+			ctx.stroke();
+
 			ctx.restore();
+
+
+
 		});
 		this.body.setUserData("gameObj", {
 			type : "plyr",
@@ -543,7 +565,7 @@ Game.Player = class{
 		this.inputs = new Game.Player.Inputs();
 
 		this.isMe = false;
-
+		this.health = 100;
 		this.shootTimer = 0;
 	}
 	handleInputEvent(ie){
@@ -588,6 +610,16 @@ Game.Player = class{
 
 		var inp = this.inputs;
 
+		if (this.health <= 0){
+			var e = new Game.Event(0, {
+	            type : "l",
+	            e : {
+	                id : this.id
+	            }
+	        });
+			game.doServerOnlyEvent(e, client);
+			return;
+		}
 		this.shootTimer -= dt;
 		if (inp.mouseDown && this.shootTimer <= 0){
 			this.shootTimer = 60/cfg.fireRate;
@@ -607,40 +639,48 @@ Game.Player = class{
 		return {
 			body : f2.Body.serializeDynamics(plyr.body),
 			cfg : Game.Player.Config.serialize(plyr.cfg),
-			inputs : Game.Player.Inputs.serialize(plyr.inputs)
+			inputs : Game.Player.Inputs.serialize(plyr.inputs),
+			health : this.health
 		}
 	}
 	static deserialize(data){
 		var plyr = new Game.Player(data.cfg);
 		plyr.body.updateDynamics(data.body);
 		plyr.inputs.useSerializedData(data.inputs);
+		plyr.health = data.health
 		return plyr;
 	}
 	static saveStateInfo(plyr){
 		return {
 			body : f2.Body.serializeDynamics(plyr.body),
 			inputs : Game.Player.Inputs.serialize(plyr.inputs),
+			health : plyr.health,
 			shootTimer : plyr.shootTimer
 		}
 	}
 	restoreStateInfo(data){
 		this.body.updateDynamics(data.body);
 		this.inputs.useSerializedData(data.inputs);
+		this.health = data.health;
 		this.shootTimer = data.shootTimer;
 	}
 	static serializeUpdate(plyr){
 		return {
 			body : f2.Body.serializeDynamics(plyr.body),
+			health : plyr.health,
 			shootTimer : plyr.shootTimer
 		}
 	}
 	useSerializedUpdate(data){
 		this.body.updateDynamics(data.body);
+		this.health = data.health;
 		this.shootTimer = data.shootTimer;
 	}
 }
 Game.Player.Config = class{
 	radius;
+	gunLength;
+
 	maxSpeed;
 	accConst;
 
@@ -649,16 +689,18 @@ Game.Player.Config = class{
 	projCfg;
 	constructor(opts){
 		opts = opts || {};
-		this.radius = opts.radius || 1;
-		this.maxSpeed = opts.maxSpeed || 4;
+		this.radius = opts.radius || 0.5;
+		this.gunLength = opts.gunLength || 1.5;
+		this.maxSpeed = opts.maxSpeed || 2;
 		this.accConst = opts.accConst || 1;
 		this.projSpeed = opts.projSpeed || 20;
-		this.fireRate = opts.fireRate || 200;
+		this.fireRate = opts.fireRate || 600;
 		this.projCfg = new Game.Projectile.Config(opts.projCfg);
 	}
 	static serialize(cfg){
 		return {
 			radius : cfg.radius,
+			gunLength : cfg.gunLength,
 			maxSpeed : cfg.maxSpeed,
 			accConst : cfg.accConst,
 			projSpeed : cfg.projSpeed,
@@ -756,7 +798,7 @@ Game.Projectile = class{
 	}
 	static createFromPlayer(player){
 		var proj = new Game.Projectile(player.cfg.projCfg);
-		proj.body.position = player.body.position;
+		proj.body.position = player.body.position.add(f2.Vec2.fromPolar(player.cfg.gunLength, player.body.angle));
 		proj.body.angle = player.body.angle;
 		proj.body.velocity = player.body.velocity.add(f2.Vec2.fromPolar(player.cfg.projSpeed, proj.body.angle));
 		proj.body.angleVelocity = 0;
@@ -786,6 +828,7 @@ Game.Projectile = class{
 	}
 	step(game, client = 0){
 		var dt = game.dt;
+		this.body.velocity = this.body.velocity.multiply(1 - this.cfg.drag * dt)
 		this.timeLeft -= dt;
 		if (this.timeLeft <= 0){
 			var e = new Game.Event(0, {
@@ -801,21 +844,24 @@ Game.Projectile = class{
 Game.Projectile.Config = class{
 	damage;
 	expireT;
+	drag;
 	body;
 	constructor(opts){
 		opts = opts || {};
 		this.damage = opts.damage || 5;
-		this.expireT = opts.expireT || 0.5;
+		this.expireT = opts.expireT || 0.7;
+		this.drag = opts.drag || 1.2;
 		this.body = opts.body || {
-			width : 0.2,
+			width : 0.1,
 			length : 0.6,
-			mass : 0.5
+			mass : 0.06
 		};
 	}
 	static serialize(cfg){
 		return {
 			damage : cfg.damage,
 			expireT : cfg.expireT,
+			drag : cfg.drag,
 			body : cfg.body
 		}
 	}

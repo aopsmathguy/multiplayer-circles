@@ -1062,7 +1062,7 @@ f2.intersect = function(A, B) {
         for (var j = 0; j < s2.length; j++) {
             var intersectInfo = f2.intersectShapes(s1[i], s2[j]);
             var o = f2.handleIntersectInfo(A, B, intersectInfo);
-            if (o.collision) {
+            if (o.moved) {
                 collisions.push(o);
             }
             moved = moved || o.moved;

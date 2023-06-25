@@ -9,5 +9,12 @@ body {
   position: relative;
 }
 canvas {
-  background: #000
+  position: absolute;
+  background: #000;
+}
+
+button {
+  position:absolute;
+  left:50%;
+  top:50%
 }
