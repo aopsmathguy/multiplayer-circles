@@ -68,7 +68,9 @@ var c = {
         av : "points",
         aw : "min",
         ax : "max",
-        ay : "originId"
+        ay : "originId",
+        az : "gunLength",
+        ba : "health"
 	}
 }
 var keywords = new Game.Utils.TwoWayMap(c.keywords);
@@ -76,16 +78,7 @@ var game;
 var controlsQueues = {};
 io.on("connection", function onJoin(client){
     var id = Game.Utils.makeid(4);
-    game.onEvent(new Game.Event(0, {
-        type : "j",
-        e : {
-            id : id,
-            cfg : {
-                maxSpeed : 5,
-                accConst : 4
-            }
-        }
-    }));
+
     client.emit("start", {c : c, game : f2.stringify(Game.encodeKeys(Game.serialize(game), keywords)), id : id})
     var cd = controlsQueues[id] = new ControlsQueue()
     cd.addEventListener("playerInput", (eData)=>{
@@ -94,6 +87,18 @@ io.on("connection", function onJoin(client){
 
     client.on("test", function(data){
         client.emit("test", {clientSendTime : data.clientSendTime, serverTime : Date.now()})
+    })
+    client.on("join", function(data){
+        game.onEvent(new Game.Event(0, {
+            type : "j",
+            e : {
+                id : id,
+                cfg : {
+                    maxSpeed : 3,
+                    accConst : 4
+                }
+            }
+        }));
     })
     client.on("playerInput", function(data){
         cd.addEvent("playerInput", data.eData, Math.max(data.time, Date.now()/1000))
