@@ -653,7 +653,7 @@ Game.Player.Config = class{
 		this.maxSpeed = opts.maxSpeed || 4;
 		this.accConst = opts.accConst || 1;
 		this.projSpeed = opts.projSpeed || 20;
-		this.fireRate = opts.fireRate || 600;
+		this.fireRate = opts.fireRate || 200;
 		this.projCfg = new Game.Projectile.Config(opts.projCfg);
 	}
 	static serialize(cfg){
