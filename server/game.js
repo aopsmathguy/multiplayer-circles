@@ -1,4 +1,3 @@
-
 const { f2 } = require('./fisyx2d.js');
 var Game = class{
 	constants = {
@@ -1358,8 +1357,6 @@ Game.Projectile.Pool = class{
 		delete this.projList[proj.id];
 	}
 }
-
-
 module.exports = {
   Game
 }
