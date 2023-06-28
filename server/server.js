@@ -57,7 +57,7 @@ io.on("connection", function onJoin(client){
                 cfg : {
                     "radius": 0.5,
                     "gunLength": 1,
-                    "maxSpeed": 3,
+                    "maxSpeed": 4,
                     "accConst": 8,
                     "projSpeed": 20,
                     "fireRate": 450,
