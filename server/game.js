@@ -1,6 +1,5 @@
 
 const { f2 } = require('./fisyx2d.js');
-
 var Game = class{
 	constants = {
 
@@ -884,15 +883,20 @@ Game.Player = class{
 			ctx.arc(0,0,that.cfg.radius, 0, 2 * Math.PI);
 			ctx.fill();
 			ctx.stroke();
+
+			var recoil = 0.4 * Math.max(that.shootTimer, 0)/(60/that.cfg.fireRate);
+			ctx.lineWidth = 0.2;
+			ctx.strokeStyle = "rgba(255,255,255,1)";
 			ctx.beginPath();
-			ctx.moveTo(0,0);
-			ctx.lineTo(that.cfg.gunLength, 0);
+			ctx.moveTo(that.cfg.radius - recoil,0);
+			ctx.lineTo(that.cfg.radius + that.cfg.gunLength - recoil, 0);
 			ctx.stroke();
 
-			ctx.strokeStyle = "rgba(255,255,255,0.7)";
+			ctx.lineWidth = 0.1;
+			ctx.strokeStyle = "rgba(255,0,0,1)";
 			ctx.beginPath();
-			ctx.moveTo(that.cfg.gunLength, 0);
-			ctx.lineTo(that.cfg.gunLength * that.health/100, 0);
+			ctx.moveTo(that.cfg.radius - recoil, 0);
+			ctx.lineTo(that.cfg.radius + that.cfg.gunLength * that.health/100 - recoil, 0);
 			ctx.stroke();
 			ctx.restore();
 		});
@@ -1060,7 +1064,7 @@ Game.Player.Config = class{
 	constructor(opts){
 		opts = opts || {};
 		this.radius = opts.radius || 0.5;
-		this.gunLength = opts.gunLength || 1.5;
+		this.gunLength = opts.gunLength || 1.0;
 		this.maxSpeed = opts.maxSpeed || 2;
 		this.accConst = opts.accConst || 1;
 		this.projSpeed = opts.projSpeed || 20;
@@ -1354,6 +1358,7 @@ Game.Projectile.Pool = class{
 		delete this.projList[proj.id];
 	}
 }
+
 
 module.exports = {
   Game

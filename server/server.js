@@ -56,11 +56,11 @@ io.on("connection", function onJoin(client){
                 id : id,
                 cfg : {
                     "radius": 0.5,
-                    "gunLength": 1.5,
+                    "gunLength": 1,
                     "maxSpeed": 3,
                     "accConst": 4,
                     "projSpeed": 20,
-                    "fireRate": 600,
+                    "fireRate": 450,
                     "projCfg": {
                         "damage": 5,
                         "expireT": 0.7,
