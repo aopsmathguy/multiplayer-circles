@@ -883,18 +883,19 @@ Game.Player = class{
 			ctx.stroke();
 
 			var recoil = 0.4 * Math.max(that.shootTimer, 0)/(60/that.cfg.fireRate);
+			ctx.translate(recoil,0);
 			ctx.lineWidth = 0.2;
 			ctx.strokeStyle = "rgba(255,255,255,1)";
 			ctx.beginPath();
-			ctx.moveTo(that.cfg.radius - recoil,0);
-			ctx.lineTo(that.cfg.radius + that.cfg.gunLength - recoil, 0);
+			ctx.moveTo(that.cfg.radius,0);
+			ctx.lineTo(that.cfg.radius + that.cfg.gunLength, 0);
 			ctx.stroke();
 
 			ctx.lineWidth = 0.1;
 			ctx.strokeStyle = "rgba(255,0,0,1)";
 			ctx.beginPath();
-			ctx.moveTo(that.cfg.radius - recoil, 0);
-			ctx.lineTo(that.cfg.radius + that.cfg.gunLength * that.health/100 - recoil, 0);
+			ctx.moveTo(that.cfg.radius, 0);
+			ctx.lineTo(that.cfg.radius + that.cfg.gunLength * that.health/100, 0);
 			ctx.stroke();
 			ctx.restore();
 		});
@@ -1021,16 +1022,16 @@ Game.Player = class{
 		var buffers = [];
 		buffers.push(Game.Utils.encodeF2BodyDynamics(data.body));
 		buffers.push(Game.Player.Config.encode(data.cfg));
-		buffers.push(Game.Utils.encodeType(data.health, Float32Array));
 		buffers.push(Game.Player.Inputs.encode(data.inputs));
+		buffers.push(Game.Utils.encodeType(data.health, Float32Array));
 		return Game.Utils.joinBuffers(buffers);
 	}
 	static decode(abr){
 		var data = {};
 		data.body = Game.Utils.decodeF2BodyDynamics(abr);
 		data.cfg = Game.Player.Config.decode(abr);
-		data.health = abr.readNextType(Float32Array);
 		data.inputs = Game.Player.Inputs.decode(abr);
+		data.health = abr.readNextType(Float32Array);
 		return data;
 	}
 	static encodeUpdate(data){
@@ -1217,7 +1218,7 @@ Game.Projectile = class{
 	}
 	static createFromPlayer(player){
 		var proj = new Game.Projectile(player.cfg.projCfg);
-		proj.body.position = player.body.position.add(f2.Vec2.fromPolar(player.cfg.gunLength, player.body.angle));
+		proj.body.position = player.body.position.add(f2.Vec2.fromPolar(player.cfg.radius + player.cfg.gunLength, player.body.angle));
 		proj.body.angle = player.body.angle;
 		proj.body.velocity = player.body.velocity.add(f2.Vec2.fromPolar(player.cfg.projSpeed, proj.body.angle));
 		proj.body.angleVelocity = 0;
