@@ -16,70 +16,31 @@ const { ControlsQueue } = require('./controlsQueue.js');
 const { Game } = require('./game.js');
 
 var c = {
-    physicsStep : 0.005,
-	keywords : {
-		a : "gamestepNumber",
-		b : "wTime",
-		c : "playerPool",
-		d : "playerMap",
-		e : "projectilePool",
-		f : "projList",
-		g : "body",
-		h : "position",
-		i : "x",
-		j : "y",
-		k : "velocity",
-		l : "angle",
-		m : "angleVelocity",
-		n : "shootTimer",
-		o : "eventLog",
-		p : "origin",
-		q : "eData",
-		r : "type",
-		s : "e",
-		t : "id",
-		u : "key",
-		v : "pid",
-        w : "radius",
-        x : "maxSpeed",
-        y : "accConst",
-        z : "projSpeed",
-        aa : "fireRate",
-        ab : "projCfg",
-        ac : "damage",
-        ad : "expireT",
-        ae : "width",
-        af : "length",
-        ag : "mass",
-        ah : "inputs",
-        ai : "keysPressed",
-        aj : "mouseDown",
-        ak : "obstacles",
-        al : "shapes",
-        am : "sType",
-        an : "vs",
-        ao : "mass",
-        ap : "inertia",
-        aq : "kFriction",
-        ar : "sFriction",
-        as : "elasticity",
-        at : "points",
-        au : "cfg",
-        av : "points",
-        aw : "min",
-        ax : "max",
-        ay : "originId",
-        az : "gunLength",
-        ba : "health"
-	}
+    physicsStep : 0.005
 }
 var keywords = new Game.Utils.TwoWayMap(c.keywords);
 var game;
 var controlsQueues = {};
-io.on("connection", function onJoin(client){
-    var id = Game.Utils.makeid(4);
+function encodeStartData(data){
+    var buffers = [];
+    var c = data.c
+    buffers.push(Game.Utils.encodeType(c.physicsStep, Float64Array));
+    buffers.push(Game.Utils.encodeType(data.id, Uint8Array));
+    buffers.push(Game.encode(data.game));
+    return Game.Utils.joinBuffers(buffers);
+}
+function decodeStartData(abr){
+    var data = {};
+    data.c = {};
+    data.c.physicsStep = abr.readNextType(Float64Array);
+    data.id = abr.readNextType(Uint8Array);
+    data.game = Game.decode(abr);
+    return data;
+}
 
-    client.emit("start", {c : c, game : f2.stringify(Game.encodeKeys(Game.serialize(game), keywords)), id : id})
+io.on("connection", function onJoin(client){
+    var id = game.playerPool.createID();
+    client.emit("start", encodeStartData({c : c, id : id, game : Game.serialize(game)}));
     var cd = controlsQueues[id] = new ControlsQueue()
     cd.addEventListener("playerInput", (eData)=>{
         game.onEvent(new Game.Event(id, eData))
@@ -90,12 +51,26 @@ io.on("connection", function onJoin(client){
     })
     client.on("join", function(data){
         game.onEvent(new Game.Event(0, {
-            type : "j",
+            type : Game.Event.Types.SPAWN_PLAYER,
             e : {
                 id : id,
                 cfg : {
-                    maxSpeed : 3,
-                    accConst : 4
+                    "radius": 0.5,
+                    "gunLength": 1.5,
+                    "maxSpeed": 3,
+                    "accConst": 4,
+                    "projSpeed": 20,
+                    "fireRate": 600,
+                    "projCfg": {
+                        "damage": 5,
+                        "expireT": 0.7,
+                        "drag": 1.2,
+                        "body": {
+                            "width": 0.1,
+                            "length": 0.6,
+                            "mass": 0.06
+                        }
+                    }
                 }
             }
         }));
@@ -105,11 +80,12 @@ io.on("connection", function onJoin(client){
     })
     client.on('disconnect', function(){
         game.onEvent(new Game.Event(0, {
-            type : "l",
+            type : Game.Event.Types.REMOVE_PLAYER,
             e : {
                 id : id
             }
         }));
+        delete controlsQueues[id];
     });
 })
 io.listen(process.env.PORT || 3000)
@@ -138,7 +114,7 @@ function gameLoop() {
     setTimeout(gameLoop, c.physicsStep * 1000)
 }
 function emitLoop(){
-    io.sockets.emit('update', f2.stringify(Game.encodeKeys(Game.serializeUpdate(game), keywords)));
+    io.sockets.emit('u', Game.encodeUpdate(Game.serializeUpdate(game)));
     game.clearEventLog();
     setTimeout(emitLoop, 50);
 }
