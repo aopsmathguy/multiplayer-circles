@@ -61,8 +61,8 @@ var Game = class{
 				"plyr" : function(){},
 				"proj" : function(a, b){
 					if (b.timeLeft > 0){
-						b.timeLeft = 0
-						a.health -= b.cfg.damage;
+						b.timeLeft = 0;
+						b.hitId = a.id;
 					}
 				},
 				"obs" : function(){}
@@ -70,8 +70,8 @@ var Game = class{
 			"proj" : {
 				"plyr" : function(a, b){
 					if (a.timeLeft > 0){
-						a.timeLeft = 0
-						b.health -= a.cfg.damage;
+						a.timeLeft = 0;
+						a.hitId = b.id;
 					}
 				},
 				"proj" : function(){},
@@ -436,7 +436,12 @@ var Game = class{
 				this.fireBullet(this.playerPool.getPlayer(e.pid), e.id);
 				break;
 			case Game.Event.Types.REMOVE_BULLET://3
-				this.removeProj(this.projectilePool.projList[e.id]);
+				var p = this.projectilePool.projList[e.id]
+				if (p.hitId){
+					var plyr = this.playerPool.getPlayer(p.hitId);
+					plyr.health -= p.cfg.damage;
+				}
+				this.removeProj(p);
 				break;
 			}
 		}else{
@@ -714,6 +719,7 @@ Game.Event = class {
 			break;
 		case Game.Event.Types.REMOVE_BULLET:
 			buffers.push(Game.Utils.encodeType(eventData.id, Uint8Array));
+			buffers.push(Game.Utils.encodeType(eventData.hitId, Uint8Array));
 			break;
 		case Game.Event.Types.KEY_DOWN:
 			buffers.push(Game.Utils.encodeChr(eventData.key));
@@ -757,7 +763,8 @@ Game.Event = class {
 			break;
 		case Game.Event.Types.REMOVE_BULLET:
 			data.eData.e = {
-				id : abr.readNextType(Uint8Array)
+				id : abr.readNextType(Uint8Array),
+				hitId : abr.readNextType(Uint8Array)
 			}
 			break;
 		case Game.Event.Types.KEY_DOWN:
@@ -1194,7 +1201,7 @@ Game.Projectile = class{
 
 	id;
 	originId;
-
+	hitId;
 	constructor(cfg){
 		this.cfg = cfg;
 		this.body = new f2.RectBody(cfg.body);
@@ -1216,6 +1223,8 @@ Game.Projectile = class{
 			obj : this
 		});
 		this.timeLeft = cfg.expireT;
+
+		this.hitId = 0;
 	}
 	static createFromPlayer(player){
 		var proj = new Game.Projectile(player.cfg.projCfg);
@@ -1274,7 +1283,8 @@ Game.Projectile = class{
 			var e = new Game.Event(0, {
 				type : Game.Event.Types.REMOVE_BULLET,
 				e : {
-					id : this.id
+					id : this.id,
+					hitId : this.hitId
 				}
 			});
 			game.doEvent(e, client);
