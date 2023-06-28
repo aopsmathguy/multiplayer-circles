@@ -884,7 +884,7 @@ Game.Player = class{
 			ctx.stroke();
 
 			var recoil = 0.4 * Math.max(that.shootTimer, 0)/(60/that.cfg.fireRate);
-			ctx.translate(recoil,0);
+			ctx.translate(-recoil,0);
 			ctx.lineWidth = 0.2;
 			ctx.strokeStyle = "rgba(255,255,255,1)";
 			ctx.beginPath();
