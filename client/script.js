@@ -1,5 +1,5 @@
-const socket = io("https://multiplayer-circles.onrender.com", { transports: ['websocket', 'polling', 'flashsocket'] })
-// const socket = io("http://localhost:3000", { transports: ['websocket', 'polling', 'flashsocket'] })
+// const socket = io("https://multiplayer-circles.onrender.com", { transports: ['websocket', 'polling', 'flashsocket'] })
+const socket = io("http://localhost:3000", { transports: ['websocket', 'polling', 'flashsocket'] })
 
 var c;
 var keywords;
@@ -9,13 +9,30 @@ var myId;
 function join(){
     socket.emit("join");
 }
+function encodeStartData(data){
+    var buffers = [];
+    var c = data.c
+    buffers.push(Game.Utils.encodeType(c.physicsStep, Float64Array));
+    buffers.push(Game.Utils.encodeType(data.id, Uint8Array));
+    buffers.push(Game.encode(data.game));
+    return Game.Utils.joinBuffers(buffers);
+}
+function decodeStartData(abr){
+    var data = {};
+    data.c = {};
+    data.c.physicsStep = abr.readNextType(Float64Array);
+    data.id = abr.readNextType(Uint8Array);
+    data.game = Game.decode(abr);
+    console.log(data);
+    console.log(abr.b.byteLength, abr.start)
+    return data;
+}
 socket.on("start", function(data){
+    data = decodeStartData(new Game.Utils.ArrayBufferReader(data));
     var alreadyStarted = c ? 1 : 0;
     c = data.c;
-    keywords = new Game.Utils.TwoWayMap(c.keywords);
-
     myId = data.id;
-    game.useSerialized(Game.decodeKeys(f2.parse(data.game), keywords), timeDiff);
+    game.useSerialized(data.game, timeDiff);
 
     game.dt = c.physicsStep;
     lastState = Game.saveStateInfo(game);
@@ -48,10 +65,12 @@ socket.on('test', function(data){
     delay = 0.5 * ping;
     // delay = ping
 })
-socket.on('update', function(data){
-    // console.log(f2.parse(data));
+socket.on('u', function(data){
+    var abr = new Game.Utils.ArrayBufferReader(data);
+    data = Game.decodeUpdate(abr);
+    // console.log(abr.b.byteLength, abr.start)
     game.useStateInfo(lastState);//something wrong with inputs when doing this stuff
-    game.useSerializedUpdate(Game.decodeKeys(f2.parse(data), keywords), timeDiff);
+    game.useSerializedUpdate(data, timeDiff);
     lastState = Game.saveStateInfo(game);
 })
 
@@ -82,20 +101,21 @@ function getAngle(canvas, evt) {
     )).subtract(new f2.Vec2(canvas.width/2, canvas.height/2)).ang();
 }
 function onInput(event){
+    var type = onInput.types[event.type];
     if (event.repeat) { return }
     var e;
-    if (["keydown", "keyup"].includes(event.type)){
+    if ([Game.Event.Types.KEY_DOWN, Game.Event.Types.KEY_UP].includes(type)){
         e = {
             key : event.key
         };
-    } else if (["mousemove"].includes(event.type)){
+    } else if ([Game.Event.Types.MOUSE_MOVE].includes(type)){
         e = {
             angle : getAngle(canvas, event)
         };
     }
     var dataEmit = {
         eData : {
-            type : event.type,
+            type : type,
             e : e
         },
         time : timeDiff + Date.now()/1000 + delay
@@ -103,6 +123,14 @@ function onInput(event){
     socket.emit("playerInput", dataEmit);
     controlsQueue.addEvent("playerInput", dataEmit.eData, Date.now()/1000 + delay)
 }
+onInput.types = {
+    "keydown" : Game.Event.Types.KEY_DOWN,
+    "keyup" : Game.Event.Types.KEY_UP,
+    "mousemove" : Game.Event.Types.MOUSE_MOVE,
+    "mousedown" : Game.Event.Types.MOUSE_DOWN,
+    "mouseup" : Game.Event.Types.MOUSE_UP
+}
+
 document.body.addEventListener('keydown', onInput);
 document.body.addEventListener('keyup', onInput);
 document.body.addEventListener('mousemove', onInput);

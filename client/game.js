@@ -1,3 +1,4 @@
+
 var Game = class{
 	constants = {
 
@@ -132,7 +133,6 @@ var Game = class{
 		for (var i in this.projectilePool.projList){
 			this.removeProj(this.projectilePool.projList[i]);
 		}
-		// console.log(this.projectilePool.projList);
 		for (var i in data.projectilePool.projList){
 			this.addProj(
 				Game.Projectile.deserialize(data.projectilePool.projList[i]),
@@ -181,58 +181,6 @@ var Game = class{
 			);
 		}
 	}
-	static encodeKeys(data, keywords){
-		function encode(obj){
-			var out;
-			if (Array.isArray(obj)){
-				out = [];
-		        for (var i = 0; i < obj.length; i++){
-		            out[i] = encode(obj[i]);
-		        }
-		    } else if (typeof obj === 'object'){
-				out = {};
-		        for (var i in obj){
-					var key = keywords.revGet(i);
-					if (key == undefined){
-						// console.log(i)
-						key = i;
-					}
-		            out[key] = encode(obj[i]);
-		        }
-		    } else{
-				if (typeof obj == 'number' && !Number.isInteger(obj)){
-					out = Number.parseFloat(obj.toFixed(3))
-				}else{
-					out = obj;
-				}
-			}
-			return out;
-		} return encode(data);
-	}
-	static decodeKeys(data, keywords){
-		function decode(obj){
-			var out;
-			if (Array.isArray(obj)){
-				out = [];
-				for (var i = 0; i < obj.length; i++){
-					out[i] = decode(obj[i]);
-				}
-			} else if (typeof obj === 'object'){
-				out = {};
-				for (var i in obj){
-					var key = keywords.get(i);
-					if (key == undefined){
-						// console.log(i)
-						key = i;
-					}
-					out[key] = decode(obj[i]);
-				}
-			}else{
-				out = obj;
-			}
-			return out;
-		} return decode(data);
-	}
 	static serializeUpdate(game){
 		var dataPlyrPool = {};
 		dataPlyrPool.playerMap = {};
@@ -275,6 +223,125 @@ var Game = class{
 		// }
 
 	}
+
+	static encode(data){
+		var buffers = [];
+		buffers.push(Game.Utils.encodeType(data.gamestepNumber, Uint8Array));
+		buffers.push(Game.Utils.encodeUint64(Math.floor(data.wTime * 1000)));
+
+		var lengthPlayers = Object.keys(data.playerPool.playerMap).length;
+		buffers.push(Game.Utils.encodeType(lengthPlayers, Uint8Array));
+		for (var i in data.playerPool.playerMap){
+			buffers.push(Game.Utils.encodeType(i, Uint8Array));
+			var p = data.playerPool.playerMap[i];
+			buffers.push(Game.Player.encode(p));
+		}
+		var lengthProjectiles = Object.keys(data.projectilePool.projList).length;
+		buffers.push(Game.Utils.encodeType(lengthProjectiles, Uint8Array));
+		for (var i in data.projectilePool.projList){
+			buffers.push(Game.Utils.encodeType(i, Uint8Array));
+			var p = data.projectilePool.projList[i];
+			buffers.push(Game.Projectile.encode(p));
+		}
+		var lengthObstacles = data.obstacles.obstacles.length;
+		buffers.push(Game.Utils.encodeType(lengthObstacles, Uint16Array));
+		for (var i = 0; i < lengthObstacles; i++){
+			var ob = data.obstacles.obstacles[i]
+			buffers.push(Game.Utils.encodeF2Body(ob));
+		}
+		return Game.Utils.joinBuffers(buffers);
+	}
+	static decode(abr){
+		var data = {};
+		data.gamestepNumber = abr.readNextType(Uint8Array);
+		data.wTime = 1/1000 * abr.readNextUint64();
+
+		data.playerPool = {
+			playerMap : {}
+		};
+		var lengthPlayers = abr.readNextType(Uint8Array);
+		for (var i = 0; i < lengthPlayers; i++){
+			var idx = abr.readNextType(Uint8Array);
+			var p = Game.Player.decode(abr);
+			data.playerPool.playerMap[idx] = p;
+		}
+
+		data.projectilePool = {
+			projList : {}
+		};
+		var lengthProjectiles = abr.readNextType(Uint8Array);
+		for (var i = 0; i < lengthProjectiles; i++){
+			var idx = abr.readNextType(Uint8Array);
+			var p = Game.Projectile.decode(abr);
+			data.projectilePool.projList[idx] = p;
+		}
+
+		data.obstacles = {
+			obstacles : []
+		};
+		var lengthObstacles = abr.readNextType(Uint16Array);
+		for (var i = 0; i < lengthObstacles; i++){
+			var ob = Game.Utils.decodeF2Body(abr);
+			data.obstacles.obstacles.push(ob);
+		};
+		return data;
+	}
+	static encodeUpdate(data){
+		var buffers = [];
+
+		buffers.push(Game.Utils.encodeType(data.gamestepNumber, Uint8Array));
+		buffers.push(Game.Utils.encodeUint64(Math.round(data.wTime * 1000)));
+
+		var lengthPlayers = Object.keys(data.playerPool.playerMap).length;
+		buffers.push(Game.Utils.encodeType(lengthPlayers, Uint8Array));
+		for (var i in data.playerPool.playerMap){
+			buffers.push(Game.Utils.encodeType(i, Uint8Array));
+			var p = data.playerPool.playerMap[i];
+			buffers.push(Game.Player.encodeUpdate(p));
+		}
+
+
+		var lengthEventLog = Object.keys(data.eventLog).length;
+		buffers.push(Game.Utils.encodeType(lengthEventLog, Uint8Array));
+		for (var i in data.eventLog){
+			buffers.push(Game.Utils.encodeType(i, Uint8Array));
+			var eventList = data.eventLog[i];
+			buffers.push(Game.Utils.encodeType(eventList.length, Uint8Array));
+			for (var j = 0; j < eventList.length; j++){
+				buffers.push(Game.Event.encode(eventList[j]));
+			}
+		}
+		return Game.Utils.joinBuffers(buffers);
+	}
+	static decodeUpdate(abr){
+		var data = {};
+
+		data.gamestepNumber = abr.readNextType(Uint8Array);
+		data.wTime = 1/1000 * abr.readNextUint64();
+
+		data.playerPool = {
+			playerMap : {}
+		};
+		var lengthPlayers = abr.readNextType(Uint8Array);
+		for (var i = 0; i < lengthPlayers; i++){
+			var idx = abr.readNextType(Uint8Array);
+			var p = Game.Player.decodeUpdate(abr);
+			data.playerPool.playerMap[idx] = p;
+		}
+
+
+		data.eventLog = {};
+		var lengthEventLog = abr.readNextType(Uint8Array);
+		for (var i = 0; i < lengthEventLog; i++){
+			var time = abr.readNextType(Uint8Array);
+			data.eventLog[time] = [];
+			var eventListLength = abr.readNextType(Uint8Array);
+			for (var j = 0; j < eventListLength; j++){
+				data.eventLog[time].push(Game.Event.decode(abr));
+			}
+		}
+		return data;
+	}
 	createMap(){
 		this.addObstacles(Game.generateMap());
 	}
@@ -308,12 +375,14 @@ var Game = class{
 		this.world.addBody(p.body);
 	}
 	removeProj(p){
-		this.projectilePool.deleteProj(p);
-		this.world.removeBody(p.body);
+		if (p){
+			this.projectilePool.deleteProj(p);
+			this.world.removeBody(p.body);
+		}
 	}
 	stepUntil(stepNum){//client function
 		var dt = this.dt;
-		while(this.gamestepNumber < stepNum){
+		while(this.gamestepNumber != stepNum){
 			var events = this.eventLog[this.gamestepNumber];
 			if (events){
 				for (var i = 0 ; i < events.length; i++){
@@ -332,12 +401,10 @@ var Game = class{
 			}
 		}
 		delete this.eventLog[this.gamestepNumber];
-		// console.log(this.eventLog)
-		// this.clearEventLog();
 	}
 	step(client = 0){
 		var dt = this.dt;
-		this.gamestepNumber += 1;
+		this.gamestepNumber = (this.gamestepNumber + 1) % 256;
 		this.playerPool.step(this, client);
 		this.projectilePool.step(this, client)
 		this.world.step(dt);
@@ -357,18 +424,18 @@ var Game = class{
 		if (e.origin === 0){
 			var e = data.e;
 			switch(data.type){
-			case "j":
+			case Game.Event.Types.SPAWN_PLAYER://0
 				if (this.playerPool.getPlayer(e.id)){return;}
 				var plyr = new Game.Player(e.cfg);
 				this.addPlayer(plyr, e.id);
 				break;
-			case "l":
+			case Game.Event.Types.REMOVE_PLAYER://1
 				this.removePlayer(e.id);
 				break;
-			case "nb":
+			case Game.Event.Types.SPAWN_BULLET://2
 				this.fireBullet(this.playerPool.getPlayer(e.pid), e.id);
 				break;
-			case "rb":
+			case Game.Event.Types.REMOVE_BULLET://3
 				this.removeProj(this.projectilePool.projList[e.id]);
 				break;
 			}
@@ -394,13 +461,189 @@ var Game = class{
 			this.onEvent(e);
 		}
 	}
-	// handleEvents(){
-	// 	for (var i = 0; i < this.eventLog.length; i++){
-	// 		this.handleEvent(this.eventLog[i]);
-	// 	}
-	// }
 }
-Game.Utils = {};
+Game.Utils = class{
+	static ArrayBufferReader = class {
+		b;
+		start;
+		constructor(buffer){
+			this.b = buffer;
+			this.start = 0;
+		}
+		readNextType(type){
+			var out = Game.Utils.decodeType(this.b.slice(this.start, this.start + type.BYTES_PER_ELEMENT), type)[0];
+			this.start += type.BYTES_PER_ELEMENT;
+			return out;
+		}
+		readNextUint64(){
+			var out = Game.Utils.decodeUint64(this.b.slice(this.start, this.start + 2 * Uint32Array.BYTES_PER_ELEMENT));
+			this.start += 2 * Uint32Array.BYTES_PER_ELEMENT;
+			return out;
+		}
+		readNextChr(){
+			var out = this.readNextType(Uint8Array);
+			return String.fromCharCode(out);
+		}
+	}
+	static encodeUint64(uint64num) {
+	    var buffer = new ArrayBuffer(8);
+	    let view = new Uint32Array(buffer);
+	    view[0] = Math.floor(uint64num / 2 ** 32);
+	    view[1] = uint64num % 2 ** 32;
+	    return buffer
+	}
+	static decodeUint64(buffer) {
+	    let view = new Uint32Array(buffer);
+	    return view[0] * 2 ** 32 + view[1]
+	}
+	static encodeType(f, type) {
+	    if (!Array.isArray(f)) {
+	        f = [f];
+	    }
+	    var buffer = new ArrayBuffer(f.length * type.BYTES_PER_ELEMENT);
+	    let view = new type(buffer);
+	    for (var i = 0; i < f.length; i++) {
+	        view[i] = f[i];
+	    }
+	    return buffer;
+	}
+	static decodeType(buffer, type) {
+	    let view = new type(buffer);
+		var f = [];
+		for (var i = 0; i < view.length; i++) {
+			f[i] = view[i];
+		}
+		return f;
+	}
+	static encodeChr(chr) {
+	    return Game.Utils.encodeType(chr.charCodeAt(0), Uint8Array);
+	}
+	static joinBuffers(buffers){
+		var l = 0;
+		for (var i = 0; i < buffers.length; i++){
+			l += buffers[i].byteLength;
+		}
+		var tmp = new Uint8Array(l);
+		var idx = 0;
+		for (var i = 0; i < buffers.length; i++){
+			tmp.set( new Uint8Array( buffers[i] ), idx );
+			idx += buffers[i].byteLength;
+		}
+		return tmp.buffer;
+	}
+
+	static encodeF2Shape(data){
+		var buffers = [];
+		buffers.push(Game.Utils.encodeChr(data.sType));
+        switch (data.sType) {
+            case "c":
+				buffers.push(Game.Utils.encodeType([data.center.x, data.center.y, data.radius], Float32Array));
+                break;
+            case "p":
+				buffers.push(Game.Utils.encodeType(data.vs.length, Uint8Array));
+				var buildArray = [];
+				for (var i = 0 ; i < data.vs.length; i++){
+					buildArray.push(...[data.vs[i].x, data.vs[i].y]);
+				}
+				buffers.push(Game.Utils.encodeType(buildArray, Float32Array));
+                break;
+        }
+		return Game.Utils.joinBuffers(buffers);
+	}
+	static decodeF2Shape(abr){
+		var data = {};
+		data.sType = abr.readNextChr();
+		switch (data.sType) {
+            case "c":
+				data.center = {
+					x: abr.readNextType(Float32Array),
+					y: abr.readNextType(Float32Array)
+				}
+				data.radius = abr.readNextType(Float32Array);
+                break;
+            case "p":
+				var length = abr.readNextType(Uint8Array);
+				data.vs = [];
+				for (var i = 0 ; i < length; i++){
+					data.vs.push({
+						x: abr.readNextType(Float32Array),
+						y: abr.readNextType(Float32Array)
+					});
+				}
+                break;
+        }
+		return data;
+	}
+	static encodeF2Body(data){
+		var buffers = [];
+		buffers.push(Game.Utils.encodeType(data.shapes.length, Uint8Array));
+		for (var i = 0; i < data.shapes.length; i++){
+			buffers.push(Game.Utils.encodeF2Shape(data.shapes[i]));
+		}
+		buffers.push(Game.Utils.encodeType([
+			data.mass,
+			data.inertia,
+			data.kFriction,
+			data.sFriction,
+			data.elasticity,
+
+			data.position.x, data.position.y,
+			data.velocity.x, data.velocity.y,
+			data.angle,
+			data.angleVelocity
+		], Float32Array));
+		return Game.Utils.joinBuffers(buffers);
+	}
+	static decodeF2Body(abr){
+		var data = {};
+		var length = abr.readNextType(Uint8Array);
+		data.shapes = [];
+		for (var i = 0; i < length; i++){
+			data.shapes.push(Game.Utils.decodeF2Shape(abr));
+		}
+		data.mass = abr.readNextType(Float32Array);
+		data.inertia = abr.readNextType(Float32Array);
+		data.kFriction = abr.readNextType(Float32Array);
+		data.sFriction = abr.readNextType(Float32Array);
+		data.elasticity = abr.readNextType(Float32Array);
+
+		data.position = {
+			x : abr.readNextType(Float32Array),
+			y : abr.readNextType(Float32Array)
+		}
+		data.velocity = {
+			x : abr.readNextType(Float32Array),
+			y : abr.readNextType(Float32Array)
+		}
+		data.angle = abr.readNextType(Float32Array);
+		data.angleVelocity = abr.readNextType(Float32Array);
+		return data;
+	}
+	static encodeF2BodyDynamics(data){
+		var buffers = [];
+		buffers.push(Game.Utils.encodeType([
+			data.position.x, data.position.y,
+			data.velocity.x, data.velocity.y,
+			data.angle,
+			data.angleVelocity
+		], Float32Array));
+		return Game.Utils.joinBuffers(buffers);
+	}
+	static decodeF2BodyDynamics(abr){
+		var data = {};
+		data.position = {
+			x : abr.readNextType(Float32Array),
+			y : abr.readNextType(Float32Array)
+		}
+		data.velocity = {
+			x : abr.readNextType(Float32Array),
+			y : abr.readNextType(Float32Array)
+		}
+		data.angle = abr.readNextType(Float32Array);
+		data.angleVelocity = abr.readNextType(Float32Array);
+		return data;
+	}
+};
 Game.Utils.TwoWayMap = class {
     constructor(map) {
        this.map = map;
@@ -426,6 +669,17 @@ Game.Utils.makeid = function(length) {
 }
 
 Game.Event = class {
+	static Types = {
+		SPAWN_PLAYER : 0,
+		REMOVE_PLAYER : 1,
+		SPAWN_BULLET : 2,
+		REMOVE_BULLET : 3,
+		KEY_DOWN : 4,
+		KEY_UP : 5,
+		MOUSE_MOVE : 6,
+		MOUSE_DOWN : 7,
+		MOUSE_UP : 8
+	}
 	origin;//0 means system event (not player emitted)
 	eData;
 	constructor(origin, eData){
@@ -440,6 +694,93 @@ Game.Event = class {
 	}
 	static deserialize(data){
 		return new Game.Event(data.origin, data.eData);
+	}
+	static encode(data){
+		var buffers = [];
+		buffers.push(Game.Utils.encodeType(data.origin, Uint8Array));
+		var ed = data.eData;
+		buffers.push(Game.Utils.encodeType(ed.type, Uint8Array));
+		var eventData = ed.e;
+		switch(ed.type){
+		case Game.Event.Types.SPAWN_PLAYER:
+			buffers.push(Game.Utils.encodeType(eventData.id, Uint8Array));
+			buffers.push(Game.Player.Config.encode(eventData.cfg));
+			break;
+		case Game.Event.Types.REMOVE_PLAYER:
+			buffers.push(Game.Utils.encodeType(eventData.id, Uint8Array));
+			break;
+		case Game.Event.Types.SPAWN_BULLET:
+			buffers.push(Game.Utils.encodeType([eventData.id, eventData.pid], Uint8Array));
+			break;
+		case Game.Event.Types.REMOVE_BULLET:
+			buffers.push(Game.Utils.encodeType(eventData.id, Uint8Array));
+			break;
+		case Game.Event.Types.KEY_DOWN:
+			buffers.push(Game.Utils.encodeChr(eventData.key));
+			break;
+		case Game.Event.Types.KEY_UP:
+			buffers.push(Game.Utils.encodeChr(eventData.key));
+			break;
+		case Game.Event.Types.MOUSE_MOVE:
+			buffers.push(Game.Utils.encodeType(eventData.angle, Float32Array));
+			break;
+		case Game.Event.Types.MOUSE_DOWN:
+			break;
+		case Game.Event.Types.MOUSE_UP:
+			break;
+		}
+		return Game.Utils.joinBuffers(buffers);
+	}
+	static decode(abr){
+		var data = {};
+		data.origin = abr.readNextType(Uint8Array);
+		data.eData = {};
+		data.eData.type = abr.readNextType(Uint8Array);
+
+		switch(data.eData.type){
+		case Game.Event.Types.SPAWN_PLAYER:
+			data.eData.e = {
+				id : abr.readNextType(Uint8Array),
+				cfg : Game.Player.Config.decode(abr)
+			}
+			break;
+		case Game.Event.Types.REMOVE_PLAYER:
+			data.eData.e = {
+				id : abr.readNextType(Uint8Array)
+			}
+			break;
+		case Game.Event.Types.SPAWN_BULLET:
+			data.eData.e = {
+				id : abr.readNextType(Uint8Array),
+				pid : abr.readNextType(Uint8Array)
+			}
+			break;
+		case Game.Event.Types.REMOVE_BULLET:
+			data.eData.e = {
+				id : abr.readNextType(Uint8Array)
+			}
+			break;
+		case Game.Event.Types.KEY_DOWN:
+			data.eData.e = {
+				key : abr.readNextChr()
+			}
+			break;
+		case Game.Event.Types.KEY_UP:
+			data.eData.e = {
+				key : abr.readNextChr()
+			}
+			break;
+		case Game.Event.Types.MOUSE_MOVE:
+			data.eData.e = {
+				angle : abr.readNextType(Float32Array)
+			}
+			break;
+		case Game.Event.Types.MOUSE_DOWN:
+			break;
+		case Game.Event.Types.MOUSE_UP:
+			break;
+		}
+		return data;
 	}
 	toString(){
 		return "(o: " + this.origin + ", data: " + JSON.stringify(this.eData) + ")";
@@ -551,11 +892,7 @@ Game.Player = class{
 			ctx.moveTo(that.cfg.gunLength, 0);
 			ctx.lineTo(that.cfg.gunLength * that.health/100, 0);
 			ctx.stroke();
-
 			ctx.restore();
-
-
-
 		});
 		this.body.setUserData("gameObj", {
 			type : "plyr",
@@ -570,19 +907,19 @@ Game.Player = class{
 	}
 	handleInputEvent(ie){
 		switch(ie.type){
-			case "keydown":
+			case Game.Event.Types.KEY_DOWN://0
 				this.inputs.keysPressed.add(ie.e.key);
 				break;
-			case "keyup":
+			case Game.Event.Types.KEY_UP://1
 				this.inputs.keysPressed.delete(ie.e.key);
 				break;
-			case "mousemove":
+			case Game.Event.Types.MOUSE_MOVE://2
 				this.inputs.angle = ie.e.angle;
 				break;
-			case "mousedown":
+			case Game.Event.Types.MOUSE_DOWN://3
 				this.inputs.mouseDown = true;
 				break;
-			case "mouseup":
+			case Game.Event.Types.MOUSE_UP://4
 				this.inputs.mouseDown = false;
 				break;
 		}
@@ -612,7 +949,7 @@ Game.Player = class{
 
 		if (this.health <= 0){
 			var e = new Game.Event(0, {
-	            type : "l",
+	            type : Game.Event.Types.REMOVE_PLAYER,
 	            e : {
 	                id : this.id
 	            }
@@ -624,9 +961,9 @@ Game.Player = class{
 		if (inp.mouseDown && this.shootTimer <= 0){
 			this.shootTimer = 60/cfg.fireRate;
 			var e = new Game.Event(0, {
-				type : "nb",
+				type : Game.Event.Types.SPAWN_BULLET,
 				e : {
-					id : Game.Utils.makeid(4),
+					id : game.projectilePool.createID(),
 					pid : this.id
 				}
 			});
@@ -640,7 +977,7 @@ Game.Player = class{
 			body : f2.Body.serializeDynamics(plyr.body),
 			cfg : Game.Player.Config.serialize(plyr.cfg),
 			inputs : Game.Player.Inputs.serialize(plyr.inputs),
-			health : this.health
+			health : plyr.health
 		}
 	}
 	static deserialize(data){
@@ -649,6 +986,18 @@ Game.Player = class{
 		plyr.inputs.useSerializedData(data.inputs);
 		plyr.health = data.health
 		return plyr;
+	}
+	static serializeUpdate(plyr){
+		return {
+			body : f2.Body.serializeDynamics(plyr.body),
+			health : plyr.health,
+			shootTimer : plyr.shootTimer
+		}
+	}
+	useSerializedUpdate(data){
+		this.body.updateDynamics(data.body);
+		this.health = data.health;
+		this.shootTimer = data.shootTimer;
 	}
 	static saveStateInfo(plyr){
 		return {
@@ -664,18 +1013,37 @@ Game.Player = class{
 		this.health = data.health;
 		this.shootTimer = data.shootTimer;
 	}
-	static serializeUpdate(plyr){
-		return {
-			body : f2.Body.serializeDynamics(plyr.body),
-			health : plyr.health,
-			shootTimer : plyr.shootTimer
-		}
+	static encode(data){
+		var buffers = [];
+		buffers.push(Game.Utils.encodeF2BodyDynamics(data.body));
+		buffers.push(Game.Player.Config.encode(data.cfg));
+		buffers.push(Game.Utils.encodeType(data.health, Float32Array));
+		buffers.push(Game.Player.Inputs.encode(data.inputs));
+		return Game.Utils.joinBuffers(buffers);
 	}
-	useSerializedUpdate(data){
-		this.body.updateDynamics(data.body);
-		this.health = data.health;
-		this.shootTimer = data.shootTimer;
+	static decode(abr){
+		var data = {};
+		data.body = Game.Utils.decodeF2BodyDynamics(abr);
+		data.cfg = Game.Player.Config.decode(abr);
+		data.health = abr.readNextType(Float32Array);
+		data.inputs = Game.Player.Inputs.decode(abr);
+		return data;
 	}
+	static encodeUpdate(data){
+		var buffers = [];
+		buffers.push(Game.Utils.encodeF2BodyDynamics(data.body));
+		buffers.push(Game.Utils.encodeType(data.health, Float32Array));
+		buffers.push(Game.Utils.encodeType(data.shootTimer, Float32Array));
+		return Game.Utils.joinBuffers(buffers);
+	}
+	static decodeUpdate(abr){
+		var data = {};
+		data.body = Game.Utils.decodeF2BodyDynamics(abr);
+		data.health = abr.readNextType(Float32Array);
+		data.shootTimer = abr.readNextType(Float32Array);
+		return data;
+	}
+
 }
 Game.Player.Config = class{
 	radius;
@@ -711,11 +1079,43 @@ Game.Player.Config = class{
 	static deserialize(data){
 		return new Game.Player.Config(data);
 	}
+
+	static encode(data){
+		var buffers = [];
+		buffers.push(
+			Game.Utils.encodeType(data.radius, Float32Array),
+			Game.Utils.encodeType(data.gunLength, Float32Array),
+			Game.Utils.encodeType(data.maxSpeed, Float32Array),
+			Game.Utils.encodeType(data.accConst, Float32Array),
+			Game.Utils.encodeType(data.projSpeed, Float32Array),
+			Game.Utils.encodeType(data.fireRate, Float32Array),
+			Game.Projectile.Config.encode(data.projCfg)
+		);
+		return Game.Utils.joinBuffers(buffers);
+	}
+	static decode(abr){
+		var data = {};
+		data.radius = abr.readNextType(Float32Array);
+		data.gunLength = abr.readNextType(Float32Array);
+		data.maxSpeed = abr.readNextType(Float32Array);
+		data.accConst = abr.readNextType(Float32Array);
+		data.projSpeed = abr.readNextType(Float32Array);
+		data.fireRate = abr.readNextType(Float32Array);
+		data.projCfg = Game.Projectile.Config.decode(abr);
+		return data;
+	}
 }
 Game.Player.Pool = class{
 	playerMap;
 	constructor(){
 		this.playerMap = {};
+	}
+	createID(){
+		var id = 0;
+		while (id == 0 || this.playerMap[id]){
+			id = Math.floor(256 * Math.random());
+		}
+		return id;
 	}
 	getPlayer(id){
 		return this.playerMap[id];
@@ -757,13 +1157,28 @@ Game.Player.Inputs = class{
 		this.angle = data.angle;
 		this.mouseDown = data.mouseDown;
 	}
-}
-Game.Player.InputEvent = class{
-	type;
-	e;
-	constructor(opts){
-		this.type = opts.type;
-		this.e = opts.e;
+	static encode(data){
+		var buffers = [];
+		buffers.push(Game.Utils.encodeType(data.angle, Float32Array));
+		buffers.push(Game.Utils.encodeType(data.mouseDown ? 1 : 0, Uint8Array));
+
+		buffers.push(Game.Utils.encodeType(data.keysPressed.length, Uint8Array));
+		for (var i = 0; i < data.keysPressed.length; i++){
+			buffers.push(Game.Utils.encodeChr(data.keysPressed[i]));
+		}
+		return Game.Utils.joinBuffers(buffers);
+	}
+	static decode(abr){
+		var data = {};
+		data.angle = abr.readNextType(Float32Array);
+		data.mouseDown = abr.readNextType(Uint8Array);
+
+		data.keysPressed = [];
+		var length = abr.readNextType(Uint8Array);
+		for (var i = 0; i < length; i++){
+			data.keysPressed.push(abr.readNextChr());
+		}
+		return data;
 	}
 }
 Game.Projectile = class{
@@ -807,14 +1222,16 @@ Game.Projectile = class{
 	}
 	static serialize(proj){
 		return {
-			body : f2.Body.serializeDynamics(proj.body),
 			cfg : Game.Projectile.Config.serialize(proj.cfg),
+			body : f2.Body.serializeDynamics(proj.body),
+			timeLeft : proj.timeLeft,
 			originId : proj.originId
 		}
 	}
 	static deserialize(data){
 		var proj = new Game.Projectile(data.cfg);
 		proj.body.updateDynamics(data.body);
+		proj.timeLeft = data.timeLeft;
 		proj.originId = data.originId;
 		return proj;
 	}
@@ -826,13 +1243,30 @@ Game.Projectile = class{
 	useSerializedUpdate(data){
 		this.body.updateDynamics(data.body);
 	}
+
+	static encode(data){
+		var buffers = [];
+		buffers.push(Game.Projectile.Config.encode(data.cfg));
+		buffers.push(Game.Utils.encodeF2BodyDynamics(data.body));
+		buffers.push(Game.Utils.encodeType(data.timeLeft, Float32Array));
+		buffers.push(Game.Utils.encodeType(data.originId, Uint8Array));
+		return Game.Utils.joinBuffers(buffers);
+	}
+	static decode(abr){
+		var data = {};
+		data.cfg = Game.Projectile.Config.decode(abr);
+		data.body = Game.Utils.decodeF2BodyDynamics(abr);
+		data.timeLeft = abr.readNextType(Float32Array);
+		data.originId = abr.readNextType(Uint8Array);
+		return data;
+	}
 	step(game, client = 0){
 		var dt = game.dt;
 		this.body.velocity = this.body.velocity.multiply(1 - this.cfg.drag * dt)
 		this.timeLeft -= dt;
 		if (this.timeLeft <= 0){
 			var e = new Game.Event(0, {
-				type : "rb",
+				type : Game.Event.Types.REMOVE_BULLET,
 				e : {
 					id : this.id
 				}
@@ -868,11 +1302,42 @@ Game.Projectile.Config = class{
 	static deserialize(data){
 		return new Game.Projectile.Config(data);
 	}
+	static encode(data){
+		var buffers = [];
+		buffers.push(
+			Game.Utils.encodeType(data.damage, Float32Array),
+			Game.Utils.encodeType(data.expireT, Float32Array),
+			Game.Utils.encodeType(data.drag, Float32Array),
+			Game.Utils.encodeType(data.body.width, Float32Array),
+			Game.Utils.encodeType(data.body.length, Float32Array),
+			Game.Utils.encodeType(data.body.mass, Float32Array)
+		);
+		return Game.Utils.joinBuffers(buffers);
+	}
+	static decode(abr){
+		var data = {};
+		data.damage = abr.readNextType(Float32Array);
+		data.expireT = abr.readNextType(Float32Array);
+		data.drag = abr.readNextType(Float32Array);
+		data.body = {
+			width : abr.readNextType(Float32Array),
+			length : abr.readNextType(Float32Array),
+			mass : abr.readNextType(Float32Array)
+		}
+		return data;
+	}
 }
 Game.Projectile.Pool = class{
 	projList;
 	constructor(opts){
 		this.projList = {};
+	}
+	createID(){
+		var id = 0;
+		while (id == 0 || this.projList[id]){
+			id = Math.floor(256 * Math.random());
+		}
+		return id;
 	}
 	step(game, client = 0){
 		for (var p in this.projList){
