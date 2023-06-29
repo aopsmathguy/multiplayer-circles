@@ -436,7 +436,7 @@ var Game = class{
 				break;
 			case Game.Event.Types.REMOVE_BULLET://3
 				var p = this.projectilePool.projList[e.id]
-				if (p.hitId){
+				if (p && p.hitId){
 					var plyr = this.playerPool.getPlayer(p.hitId);
 					plyr.health -= p.cfg.damage;
 				}
